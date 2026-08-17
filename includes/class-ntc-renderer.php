@@ -180,6 +180,10 @@ final class NTC_Renderer {
 			'style'=>$this->table_vars($config).'margin-top:'.absint($config['marginTop']).'px;margin-bottom:'.absint($config['marginBottom']).'px;',
 		));
 		$out='<div '.$wrapper_attributes.'>'.$css;
+		$tools = '';
+		if ( ! empty( $config['enableSearch'] ) && $rows ) { $tools .= '<input type="search" class="ntc-table-search" placeholder="' . esc_attr__( 'Search this table…', 'native-tables-charts' ) . '" aria-label="' . esc_attr__( 'Search this table', 'native-tables-charts' ) . '">'; }
+		if ( ! empty( $config['enableExport'] ) ) { $tools .= '<button type="button" class="ntc-export-btn" data-format="csv">' . esc_html__( 'Download CSV', 'native-tables-charts' ) . '</button>'; }
+		if ( '' !== $tools ) { $out .= '<div class="ntc-table-tools">' . $tools . '</div>'; }
 		$scroll_styles=array();if((int)$config['maxHeight']>0)$scroll_styles[]='max-height:'.absint($config['maxHeight']).'px';if((int)$config['containerWidth']>0)$scroll_styles[]='max-width:'.absint($config['containerWidth']).'px';$out.='<div class="ntc-table-scroll"'.($scroll_styles?' style="'.esc_attr(implode(';',$scroll_styles)).'"':'').'>';
 		$out.='<table class="ntc-table" data-sortable="'.(!empty($config['enableSorting'])?'1':'0').'" data-update-position="'.(!empty($config['updatePositionOnSort'])?'1':'0').'">';
 		if(!empty($config['showCaption']) && ''!==(string)$config['caption']){$out.='<caption style="caption-side:'.('bottom'===$config['captionSide']?'bottom':'top').'">'.wp_kses_post($config['caption']).'</caption>';}
@@ -223,9 +227,14 @@ final class NTC_Renderer {
 			$out.='</tr>';
 		}
 		$out.='</tbody></table></div>';
+		if ( ! empty( $config['enablePagination'] ) ) {
+			$size = max( 1, min( 500, absint( $config['rowsPerPage'] ?? 10 ) ) );
+			$hidden = count( $rows ) <= $size ? ' is-hidden' : '';
+			$out .= '<div class="ntc-table-pager' . $hidden . '" data-page-size="' . $size . '"><button type="button" class="ntc-pager-prev" aria-label="' . esc_attr__( 'Previous page', 'native-tables-charts' ) . '">‹</button><span class="ntc-pager-label">1 / ' . max( 1, (int) ceil( count( $rows ) / $size ) ) . '</span><button type="button" class="ntc-pager-next" aria-label="' . esc_attr__( 'Next page', 'native-tables-charts' ) . '">›</button></div>';
+		}
 		$out .= $this->updated_date_html( $config, $data );
 		$out .= '</div>' . $this->schema_json( $data, $config, $columns );
-		if(!empty($config['enableSorting'])&&!empty($config['enableManualSorting'])){wp_enqueue_script('ntc-frontend');}
+		if ( ! empty( $config['enableSorting'] ) && ! empty( $config['enableManualSorting'] ) || ! empty( $config['enableSearch'] ) || ! empty( $config['enablePagination'] ) || ! empty( $config['enableExport'] ) ) { wp_enqueue_script( 'ntc-frontend' ); }
 		return $out;
 	}
 
@@ -511,6 +520,12 @@ final class NTC_Renderer {
 		if('collapsible'===$data_mode){$out.='<details class="ntc-chart-data"><summary>'.esc_html__('View chart data','native-tables-charts').'</summary>'.$this->accessible_chart_table($chart_rows,$columns,$config).'</details>';}
 		elseif('visible'===$data_mode){$out.='<section class="ntc-chart-data ntc-chart-data-visible"><h4>'.esc_html__('Chart data','native-tables-charts').'</h4>'.$this->accessible_chart_table($chart_rows,$columns,$config).'</section>';}
 		elseif('screenreader'===$data_mode){$out.='<div class="ntc-chart-data-sr ntc-sr-only">'.$this->accessible_chart_table($chart_rows,$columns,$config).'</div>';}
+		if ( ! empty( $config['enableExport'] ) ) {
+			$png = in_array( $type, array( 'donut', 'line', 'scatter' ), true );
+			$out .= '<div class="ntc-chart-tools"><button type="button" class="ntc-export-btn" data-format="csv">' . esc_html__( 'Download CSV', 'native-tables-charts' ) . '</button>' . ( $png ? '<button type="button" class="ntc-export-btn" data-format="png">' . esc_html__( 'Download PNG', 'native-tables-charts' ) . '</button>' : '' ) . '</div>';
+			$out .= '<div class="ntc-chart-export-data ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';
+			wp_enqueue_script( 'ntc-frontend' );
+		}
 		$out.='</figure>'.$this->schema_json( $data, $config, $columns );
 		return $out;
 	}
@@ -574,6 +589,9 @@ final class NTC_Renderer {
 		$bp=max(360,min(1200,absint($c['mobileBreakpoint']??620)));$prefix='#'.esc_attr($id);$css='<style>';
 		$css.='@container (max-width:'.$bp.'px){'.$prefix.' .ntc-chart-title{font-size:var(--ntc-mobile-title-size)}'.$prefix.' .ntc-hbar-label,'.$prefix.' .ntc-vbar-label,'.$prefix.' .ntc-group-label,'.$prefix.' .ntc-donut-legend span{font-size:var(--ntc-mobile-label-size)}'.$prefix.' .ntc-hbar-value,'.$prefix.' .ntc-vbar-value,'.$prefix.' .ntc-group-bar em{font-size:var(--ntc-mobile-value-size)}'.$prefix.' .ntc-axis-ticks,'.$prefix.' .ntc-chart-axis-label{font-size:var(--ntc-mobile-axis-size)}'.$prefix.' .ntc-chart-meta,'.$prefix.' .ntc-series-legend{font-size:var(--ntc-mobile-legend-size)}'.$prefix.' .ntc-chart-footer{font-size:var(--ntc-mobile-footer-size)}'.$prefix.' .ntc-dual{grid-template-columns:1fr}'.$prefix.' .ntc-hbar-row{grid-template-columns:1fr auto;gap:5px 8px}'.$prefix.' .ntc-hbar-label{grid-column:1/-1;text-align:left}'.$prefix.' .ntc-hbar-track{grid-column:1}'.$prefix.' .ntc-hbar-value{grid-column:2}'.$prefix.' .ntc-hbar-axis{grid-template-columns:1fr auto;gap:8px}'.$prefix.' .ntc-hbar-axis>span:first-child{display:none}'.$prefix.' .ntc-group-row{grid-template-columns:1fr}'.$prefix.' .ntc-group-label{text-align:left}'.$prefix.' .ntc-donut-wrap{grid-template-columns:1fr}}';
 		$css.='@media (max-width:'.$bp.'px){'.$prefix.' .ntc-dual{grid-template-columns:1fr}'.$prefix.' .ntc-hbar-row{grid-template-columns:1fr auto;gap:5px 8px}'.$prefix.' .ntc-hbar-label{grid-column:1/-1;text-align:left}'.$prefix.' .ntc-hbar-axis{grid-template-columns:1fr auto;gap:8px}'.$prefix.' .ntc-hbar-axis>span:first-child{display:none}}';
+		if('auto'===($c['themeMode']??'fixed')){
+			$css .= '@media (prefers-color-scheme: dark){' . $prefix . '{--ntc-chart-bg:' . esc_attr( self::safe_css_value( $c['darkBackground'] ) ) . ';--ntc-chart-text:' . esc_attr( self::safe_css_value( $c['darkTextColor'] ) ) . ';--ntc-muted:' . esc_attr( self::safe_css_value( $c['darkMutedColor'] ) ) . ';--ntc-grid:' . esc_attr( self::safe_css_value( $c['darkGridColor'] ) ) . '}}';
+		}
 		return $css.'</style>';
 	}
 
