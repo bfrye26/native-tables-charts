@@ -545,13 +545,19 @@ endif;
 				?>
 	<tr><th><?php echo esc_html( $label ); ?></th><td><?php echo esc_html( $report[ $k ] ?? 0 ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
 		<?php
-		if ( is_array( $result ) ) :
-			?>
+		if ( is_array( $result ) || ! empty( $rollback_progress['batch_id'] ) ) :
+			if ( is_array( $result ) ) :
+				?>
 			<h2><?php esc_html_e( 'Latest Migration Result', 'native-tables-charts' ); ?></h2><pre class="ntc-result"><?php echo esc_html( wp_json_encode( $result, JSON_PRETTY_PRINT ) ); ?></pre>
-			<?php
+				<?php
+			endif;
 			if ( ! empty( $result['batch_id'] ) || ! empty( $rollback_progress['batch_id'] ) ) :
 				?>
-			<form method="post" id="ntc-rollback-form" onsubmit="return this.elements.offset.value!=0||confirm('<?php echo esc_js( __( 'Restore the original post content from this migration batch?', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_rollback"><input type="hidden" name="batch_id" value="<?php echo esc_attr( ( $rollback_progress['batch_id'] ?? ( $result['batch_id'] ?? '' ) ) ); ?>"><input type="hidden" name="offset" value="<?php echo esc_attr( $rollback_progress['offset'] ?? '0' ); ?>"><button class="button"><?php esc_html_e( 'Rollback This Batch', 'native-tables-charts' ); ?></button></form><?php endif; ?><?php endif; ?>
+			<form method="post" id="ntc-rollback-form" onsubmit="return this.elements.offset.value!=0||confirm('<?php echo esc_js( __( 'Restore the original post content from this migration batch?', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_rollback"><input type="hidden" name="batch_id" value="<?php echo esc_attr( ( $rollback_progress['batch_id'] ?? ( $result['batch_id'] ?? '' ) ) ); ?>"><input type="hidden" name="offset" value="<?php echo esc_attr( $rollback_progress['offset'] ?? '0' ); ?>"><button class="button"><?php esc_html_e( 'Rollback This Batch', 'native-tables-charts' ); ?></button></form>
+				<?php
+			endif;
+		endif;
+		?>
 		<?php if ( is_array( $migration_progress ) && empty( $migration_progress['done'] ) ) : ?>
 			<?php /* translators: 1: number of posts processed so far, 2: total posts to process. */ ?>
 		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d posts processed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['offset'], (int) $migration_progress['total'] ); ?></p></div>
