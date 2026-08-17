@@ -42,7 +42,12 @@ function ntcBindTable(table){
 	if(search){search.addEventListener('input',function(){
 		var q=search.value.toLowerCase();
 		filtered=q?allRows.filter(function(r){return r.textContent.toLowerCase().indexOf(q)>=0;}):allRows;
-		page=1;renderPage();
+		page=1;
+		if(pager&&size){renderPage();}
+		else{
+			var shown=new Set(filtered);
+			allRows.forEach(function(r){r.style.display=shown.has(r)?'':'none';});
+		}
 	});}
 	if(pager&&size){
 		var prev=pager.querySelector('.ntc-pager-prev'),next=pager.querySelector('.ntc-pager-next');
@@ -56,7 +61,7 @@ function ntcBindTable(table){
 function ntcBindChart(fig){
 	var csvBtn=fig.querySelector('.ntc-export-btn[data-format="csv"]');
 	if(csvBtn){csvBtn.addEventListener('click',function(){
-		var data=fig.querySelector('.ntc-chart-export-data table')||fig.querySelector('.ntc-chart-data table');
+		var data=fig.querySelector('.ntc-chart-export-data table')||fig.querySelector('.ntc-chart-data-sr table')||fig.querySelector('.ntc-chart-data table');
 		if(data)ntcDownload(ntcTableToCsv(data,','),'chart-data.csv','text/csv');
 	});}
 	var pngBtn=fig.querySelector('.ntc-export-btn[data-format="png"]');

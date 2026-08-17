@@ -30,6 +30,8 @@ $assert( 'boom' === $GLOBALS['last_update'][0]['source_error'], 'record_sync sto
 $parsed = NTC_Sync::parse( $repo, "Name,Score\nA,10\nB,20", 'csv' );
 $assert( 2 === count( $parsed['columns'] ) && 2 === count( $parsed['rows'] ), 'csv parse columns/rows' );
 $assert( 'A' === $parsed['rows'][0][0], 'csv parse first cell' );
+$assert( 'tsv' === NTC_Sync::detect_format( "a\tb\n1\t2" ), 'detect_format tsv' );
+$assert( 'csv' === NTC_Sync::detect_format( "Name,Note\nA,\"x\ty\"" ), 'detect_format csv with tab in quoted cell' );
 $GLOBALS['fake_http'] = array(
 	'response' => array( 'code' => 200 ),
 	'body'     => "a,b\n1,2",
@@ -201,5 +203,19 @@ $out = $ntc->shortcode_dataset(
 	)
 );
 $assert( false !== strpos( $out, 'ntc-table-wrap' ), 'shortcode renders table markup' );
+$dup = $ntc->shortcode_dataset(
+	array(
+		'id'   => 99,
+		'type' => array( 'table', 'chart' ),
+	)
+);
+$assert( false !== strpos( $dup, 'ntc-empty' ), 'shortcode duplicated type attr does not fatal' );
+$dup_table = $ntc->shortcode_dataset(
+	array(
+		'id'   => 99,
+		'type' => 'table',
+	)
+);
+$assert( false !== strpos( $dup_table, 'ntc-table-wrap' ), 'shortcode table type still renders table markup' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

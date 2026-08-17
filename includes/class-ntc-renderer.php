@@ -1254,7 +1254,8 @@ final class NTC_Renderer {
 		if ( ! empty( $config['enableExport'] ) ) {
 			$png  = in_array( $type, array( 'donut', 'line', 'scatter' ), true );
 			$out .= '<div class="ntc-chart-tools"><button type="button" class="ntc-export-btn" data-format="csv">' . esc_html__( 'Download CSV', 'native-tables-charts' ) . '</button>' . ( $png ? '<button type="button" class="ntc-export-btn" data-format="png">' . esc_html__( 'Download PNG', 'native-tables-charts' ) . '</button>' : '' ) . '</div>';
-			$out .= '<div class="ntc-chart-export-data ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';
+			if ( 'disabled' === $data_mode ) {
+				$out .= '<div class="ntc-chart-export-data ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';}
 			wp_enqueue_script( 'ntc-frontend' );
 		}
 		$out .= '</figure>' . $this->schema_json( $data, $config, $columns );

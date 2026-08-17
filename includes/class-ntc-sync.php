@@ -32,6 +32,11 @@ final class NTC_Sync {
 		return $body;
 	}
 
+	public static function detect_format( string $body ): string {
+		$first_line = (string) strtok( $body, "\n" );
+		return str_contains( $first_line, "\t" ) ? 'tsv' : 'csv';
+	}
+
 	public static function sync_dataset( NTC_Repository $repo, int $id ): array {
 		$source = $repo->get_source( $id );
 		if ( ! $source || '' === trim( (string) $source['source_url'] ) ) {
@@ -41,7 +46,7 @@ final class NTC_Sync {
 			); }
 		try {
 			$body   = self::fetch( (string) $source['source_url'] );
-			$parsed = self::parse( $repo, $body, str_contains( $body, "\t" ) ? 'tsv' : 'csv' );
+			$parsed = self::parse( $repo, $body, self::detect_format( $body ) );
 			if ( ! $parsed['columns'] ) {
 				throw new Exception( 'No usable data found in source.' ); }
 			$repo->replace_rows( $id, $parsed['rows'] );

@@ -68,7 +68,8 @@ final class NTC_Plugin {
 				return 'chart' === $view['type'] ? $this->renderer->render_chart( $attributes ) : $this->renderer->render_table( $attributes );
 			}
 		}
-		if ( 'chart' === sanitize_key( $a['type'] ) ) {
+		$type_attr = is_array( $a['type'] ) ? (string) end( $a['type'] ) : (string) $a['type'];
+		if ( 'chart' === sanitize_key( $type_attr ) ) {
 			$attributes['config'] = array(
 				'chartType'    => 'horizontal-bar',
 				'labelColumn'  => 0,
