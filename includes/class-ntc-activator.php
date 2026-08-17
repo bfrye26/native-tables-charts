@@ -5,7 +5,14 @@ final class NTC_Activator {
 	public static function activate(): void {
 		self::create_tables();
 		self::add_caps();
+		if ( ! wp_next_scheduled( 'ntc_sync_remote_datasets' ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'ntc_sync_remote_datasets' );
+		}
 		update_option( 'ntc_db_version', NTC_VERSION );
+	}
+
+	public static function deactivate(): void {
+		wp_clear_scheduled_hook( 'ntc_sync_remote_datasets' );
 	}
 
 	private static function create_tables(): void {
@@ -99,6 +106,9 @@ final class NTC_Activator {
 	}
 
 	public static function uninstall(): void {
+		wp_clear_scheduled_hook( 'ntc_sync_remote_datasets' );
+		global $wpdb;
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'ntc_lt_view_%'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		self::remove_caps();
 		if ( ! get_option( 'ntc_delete_data_on_uninstall', false ) ) { return; }
 		global $wpdb;

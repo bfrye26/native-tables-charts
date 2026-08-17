@@ -28,6 +28,7 @@ require_once NTC_DIR . 'includes/class-ntc-migrator.php';
 require_once NTC_DIR . 'includes/class-ntc-plugin.php';
 
 register_activation_hook( __FILE__, array( 'NTC_Activator', 'activate' ) );
+register_deactivation_hook( __FILE__, array( 'NTC_Activator', 'deactivate' ) );
 register_uninstall_hook( __FILE__, array( 'NTC_Activator', 'uninstall' ) );
 
 add_action(

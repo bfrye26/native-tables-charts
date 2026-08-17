@@ -3,6 +3,7 @@ require __DIR__ . '/bootstrap.php';
 require dirname( __DIR__ ) . '/includes/class-ntc-formulas.php';
 require dirname( __DIR__ ) . '/includes/class-ntc-renderer.php';
 require dirname( __DIR__ ) . '/includes/class-ntc-rest.php';
+require dirname( __DIR__ ) . '/includes/class-ntc-activator.php';
 $fails = 0;
 $assert = function ( $cond, $label ) use ( &$fails ) { if ( $cond ) { echo "ok   $label\n"; } else { echo "FAIL $label\n"; $fails++; } };
 $assert( "'=SUM(A1)" === NTC_REST::guard_csv_cell( '=SUM(A1)' ), 'guard prefixes =' );
@@ -15,5 +16,7 @@ $assert( 'my-style-2' === $GLOBALS['wpdb']->last_insert['slug'], 'slug collision
 $GLOBALS['fake_slug_taken'] = false;
 $repo->create_preset( 'table', 'My Style', array() );
 $assert( 'my-style' === $GLOBALS['wpdb']->last_insert['slug'], 'free slug used as-is' );
+NTC_Activator::deactivate();
+$assert( 'ntc_sync_remote_datasets' === $GLOBALS['cleared_hook'], 'deactivate clears cron hook' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );
