@@ -7,7 +7,7 @@ final class NTC_REST {
 
 	public function register(): void {
 		register_rest_route('ntc/v1','/datasets',array(
-			array('methods'=>'GET','callback'=>array($this,'datasets_list'),'permission_callback'=>array($this,'can_edit')),
+			array('methods'=>'GET','callback'=>array($this,'datasets_list'),'permission_callback'=>array($this,'can_edit'),'args'=>array( 'per_page'=>array('sanitize_callback'=>'absint','default'=>100), 'offset'=>array('sanitize_callback'=>'absint','default'=>0), 'search'=>array('sanitize_callback'=>'sanitize_text_field','default'=>'') )),
 			array('methods'=>'POST','callback'=>array($this,'datasets_create'),'permission_callback'=>array($this,'can_create')),
 		));
 		register_rest_route('ntc/v1','/datasets/(?P<id>\d+)',array(
@@ -16,11 +16,11 @@ final class NTC_REST {
 			array('methods'=>'DELETE','callback'=>array($this,'dataset_delete'),'permission_callback'=>array($this,'can_delete')),
 		));
 		register_rest_route('ntc/v1','/datasets/(?P<id>\d+)/rows',array(
-			array('methods'=>'GET','callback'=>array($this,'rows_get'),'permission_callback'=>array($this,'can_edit')),
+			array('methods'=>'GET','callback'=>array($this,'rows_get'),'permission_callback'=>array($this,'can_edit'),'args'=>array( 'limit'=>array('sanitize_callback'=>'absint','default'=>0), 'offset'=>array('sanitize_callback'=>'absint','default'=>0) )),
 			array('methods'=>array('PUT','PATCH'),'callback'=>array($this,'rows_save'),'permission_callback'=>array($this,'can_edit')),
 		));
 		register_rest_route('ntc/v1','/views',array(
-			array('methods'=>'GET','callback'=>array($this,'views_list'),'permission_callback'=>array($this,'can_edit')),
+			array('methods'=>'GET','callback'=>array($this,'views_list'),'permission_callback'=>array($this,'can_edit'),'args'=>array( 'dataset_id'=>array('sanitize_callback'=>'absint'), 'type'=>array('sanitize_callback'=>'sanitize_key','default'=>'') )),
 			array('methods'=>'POST','callback'=>array($this,'views_create'),'permission_callback'=>array($this,'can_create')),
 		));
 		register_rest_route('ntc/v1','/views/(?P<id>\d+)',array(
@@ -29,12 +29,12 @@ final class NTC_REST {
 			array('methods'=>'DELETE','callback'=>array($this,'view_delete'),'permission_callback'=>array($this,'can_delete')),
 		));
 		register_rest_route('ntc/v1','/presets',array(
-			array('methods'=>'GET','callback'=>array($this,'presets_list'),'permission_callback'=>'__return_true'),
+			array('methods'=>'GET','callback'=>array($this,'presets_list'),'permission_callback'=>array($this,'can_edit')),
 			array('methods'=>'POST','callback'=>array($this,'preset_create'),'permission_callback'=>array($this,'can_presets')),
 		));
 		register_rest_route('ntc/v1','/presets/(?P<id>\d+)',array(array('methods'=>'DELETE','callback'=>array($this,'preset_delete'),'permission_callback'=>array($this,'can_presets'))));
 		register_rest_route('ntc/v1','/import',array(array('methods'=>'POST','callback'=>array($this,'import_data'),'permission_callback'=>array($this,'can_import'))));
-		register_rest_route('ntc/v1','/export/(?P<id>\d+)',array(array('methods'=>'GET','callback'=>array($this,'export_data'),'permission_callback'=>array($this,'can_export'))));
+		register_rest_route('ntc/v1','/export/(?P<id>\d+)',array(array('methods'=>'GET','callback'=>array($this,'export_data'),'permission_callback'=>array($this,'can_export'),'args'=>array( 'format'=>array('sanitize_callback'=>'sanitize_key','default'=>'json') ))));
 	}
 
 	public function can_edit(): bool { return current_user_can('ntc_edit_datasets') || current_user_can('manage_options'); }
@@ -56,7 +56,9 @@ final class NTC_REST {
 	public function rows_get(WP_REST_Request $r): WP_REST_Response {$id=(int)$r['id'];$limit=(int)($r['limit']?:0);$offset=(int)($r['offset']?:0);return rest_ensure_response(array('rows'=>$this->repo->get_rows($id,$limit,$offset),'total'=>$this->repo->row_count($id)));}
 	public function rows_save(WP_REST_Request $r){$p=(array)$r->get_json_params();$id=(int)$r['id'];if(!empty($p['replace'])){$ok=$this->repo->replace_rows($id,(array)($p['rows']??array()));}elseif(isset($p['indexedRows'])){$ok=$this->repo->patch_rows($id,(array)$p['indexedRows']);}else{$ok=$this->repo->upsert_rows($id,(array)($p['rows']??array()),absint($p['startIndex']??0));}return rest_ensure_response(array('success'=>$ok,'total'=>$this->repo->row_count($id)));}
 	public function views_list(WP_REST_Request $r): WP_REST_Response {$dataset=isset($r['dataset_id'])?(int)$r['dataset_id']:null;return rest_ensure_response($this->repo->list_views($dataset,(string)($r['type']?:'')));}
-	public function views_create(WP_REST_Request $r){$p=(array)$r->get_json_params();$id=$this->repo->create_view(absint($p['dataset_id']??0),(string)($p['type']??'table'),(string)($p['name']??''),(array)($p['config']??array()));return rest_ensure_response($this->repo->get_view($id));}
+	public function views_create(WP_REST_Request $r){$p=(array)$r->get_json_params();if ( ! $this->repo->get_dataset( absint( $p['dataset_id'] ?? 0 ) ) ) {
+		return new WP_Error( 'ntc_not_found', __( 'Dataset not found.', 'native-tables-charts' ), array( 'status' => 404 ) );
+	}$id=$this->repo->create_view(absint($p['dataset_id']??0),(string)($p['type']??'table'),(string)($p['name']??''),(array)($p['config']??array()));return rest_ensure_response($this->repo->get_view($id));}
 	public function view_get(WP_REST_Request $r){$v=$this->repo->get_view((int)$r['id']);return $v?rest_ensure_response($v):new WP_Error('ntc_not_found',__('View not found.','native-tables-charts'),array('status'=>404));}
 	public function view_update(WP_REST_Request $r){return rest_ensure_response(array('success'=>$this->repo->update_view((int)$r['id'],(array)$r->get_json_params())));}
 	public function view_delete(WP_REST_Request $r){return rest_ensure_response(array('success'=>$this->repo->delete_view((int)$r['id'])));}
@@ -85,5 +87,13 @@ final class NTC_REST {
 		$delimiter='tsv'===$format?"	":',';$matrix=array();$fh=fopen('php://temp','r+');if(false===$fh)throw new Exception(__('Could not parse the import.','native-tables-charts'));fwrite($fh,$raw);rewind($fh);while(($record=fgetcsv($fh,0,$delimiter,'"',''))!==false){if(count($record)===1&&trim((string)$record[0])==='')continue;$matrix[]=$record;if(count($matrix)>10001)break;}fclose($fh);if(!$matrix)return array('columns'=>array(),'rows'=>array());$header=array_shift($matrix);$header=array_slice($header,0,40);$cols=array();foreach($header as $i=>$h)$cols[]=array('id'=>sanitize_key($h?:'c'.($i+1)),'label'=>sanitize_text_field($h?:'Column '.($i+1)),'type'=>'auto','unit'=>'');$width=count($cols);$rows=array_slice(array_map(fn($row)=>array_slice(array_pad((array)$row,$width,''),0,$width),$matrix),0,10000);return array('columns'=>$cols,'rows'=>$rows);
 	}
 
-	public function export_data(WP_REST_Request $r){$d=$this->repo->get_dataset((int)$r['id'],true);if(!$d)return new WP_Error('ntc_not_found',__('Dataset not found.','native-tables-charts'),array('status'=>404));$format=sanitize_key($r['format']?:'json');if('json'===$format)return rest_ensure_response(array('name'=>$d['name'],'columns'=>$d['columns'],'rows'=>$d['rows']));$delimiter='tsv'===$format?"\t":',';$fh=fopen('php://temp','r+');fputcsv($fh,array_map(fn($c)=>$c['label']??'',$d['columns']),$delimiter,'"','');foreach($d['rows'] as $row)fputcsv($fh,$row,$delimiter,'"','');rewind($fh);$body=stream_get_contents($fh);fclose($fh);return new WP_REST_Response($body,200,array('Content-Type'=>'tsv'===$format?'text/tab-separated-values':'text/csv','Content-Disposition'=>'attachment; filename="'.sanitize_file_name($d['name']).'.'.$format.'"'));}
+	public static function guard_csv_cell( string $cell ): string {
+		// Prevent spreadsheet formula injection from cells that start with = + - @ (OWASP CSV injection).
+		if ( preg_match( '/^[=+\-@]/', $cell ) && ! preg_match( '/^[=+\-@][0-9.,]+$/', $cell ) ) {
+			return "'" . $cell;
+		}
+		return $cell;
+	}
+
+	public function export_data(WP_REST_Request $r){$d=$this->repo->get_dataset((int)$r['id'],true);if(!$d)return new WP_Error('ntc_not_found',__('Dataset not found.','native-tables-charts'),array('status'=>404));$format=sanitize_key($r['format']?:'json');if('json'===$format)return rest_ensure_response(array('name'=>$d['name'],'columns'=>$d['columns'],'rows'=>$d['rows']));$delimiter='tsv'===$format?"\t":',';$fh=fopen('php://temp','r+');fputcsv($fh,array_map(fn($c)=>$c['label']??'',$d['columns']),$delimiter,'"','');foreach ( $d['rows'] as $row ) { fputcsv( $fh, array_map( array( __CLASS__, 'guard_csv_cell' ), $row ), $delimiter, '"', '' ); }rewind($fh);$body=stream_get_contents($fh);fclose($fh);return new WP_REST_Response($body,200,array('Content-Type'=>'tsv'===$format?'text/tab-separated-values':'text/csv','Content-Disposition'=>'attachment; filename="'.sanitize_file_name($d['name']).'.'.$format.'"'));}
 }
