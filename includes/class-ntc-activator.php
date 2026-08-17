@@ -1,5 +1,6 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) { exit; }
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; }
 
 final class NTC_Activator {
 	public static function activate(): void {
@@ -26,7 +27,8 @@ final class NTC_Activator {
 		$presets  = $wpdb->prefix . 'ntc_presets';
 		$backups  = $wpdb->prefix . 'ntc_backups';
 
-		dbDelta( "CREATE TABLE {$datasets} (
+		dbDelta(
+			"CREATE TABLE {$datasets} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			name VARCHAR(255) NOT NULL DEFAULT '',
 			description TEXT NULL,
@@ -40,9 +42,11 @@ final class NTC_Activator {
 			PRIMARY KEY (id),
 			KEY updated_at (updated_at),
 			KEY author_id (author_id)
-		) {$charset};" );
+		) {$charset};"
+		);
 
-		dbDelta( "CREATE TABLE {$rows} (
+		dbDelta(
+			"CREATE TABLE {$rows} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			dataset_id BIGINT UNSIGNED NOT NULL,
 			row_index INT UNSIGNED NOT NULL,
@@ -51,9 +55,11 @@ final class NTC_Activator {
 			PRIMARY KEY (id),
 			UNIQUE KEY dataset_row (dataset_id,row_index),
 			KEY dataset_id (dataset_id)
-		) {$charset};" );
+		) {$charset};"
+		);
 
-		dbDelta( "CREATE TABLE {$views} (
+		dbDelta(
+			"CREATE TABLE {$views} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			dataset_id BIGINT UNSIGNED NOT NULL,
 			name VARCHAR(255) NOT NULL DEFAULT '',
@@ -65,9 +71,11 @@ final class NTC_Activator {
 			PRIMARY KEY (id),
 			KEY dataset_id (dataset_id),
 			KEY type (type)
-		) {$charset};" );
+		) {$charset};"
+		);
 
-		dbDelta( "CREATE TABLE {$presets} (
+		dbDelta(
+			"CREATE TABLE {$presets} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			name VARCHAR(255) NOT NULL,
 			slug VARCHAR(191) NOT NULL,
@@ -78,9 +86,11 @@ final class NTC_Activator {
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (id),
 			UNIQUE KEY slug_type (slug,type)
-		) {$charset};" );
+		) {$charset};"
+		);
 
-		dbDelta( "CREATE TABLE {$backups} (
+		dbDelta(
+			"CREATE TABLE {$backups} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			batch_id VARCHAR(64) NOT NULL,
 			post_id BIGINT UNSIGNED NOT NULL,
@@ -90,19 +100,28 @@ final class NTC_Activator {
 			PRIMARY KEY (id),
 			KEY batch_id (batch_id),
 			KEY post_id (post_id)
-		) {$charset};" );
+		) {$charset};"
+		);
 	}
 
 	private static function add_caps(): void {
 		$caps = array(
-			'ntc_create_datasets', 'ntc_edit_datasets', 'ntc_delete_datasets',
-			'ntc_manage_presets', 'ntc_import', 'ntc_export', 'ntc_manage_settings', 'ntc_migrate',
+			'ntc_create_datasets',
+			'ntc_edit_datasets',
+			'ntc_delete_datasets',
+			'ntc_manage_presets',
+			'ntc_import',
+			'ntc_export',
+			'ntc_manage_settings',
+			'ntc_migrate',
 		);
 		foreach ( array( 'administrator', 'editor' ) as $role_name ) {
 			$role = get_role( $role_name );
-			if ( ! $role ) { continue; }
+			if ( ! $role ) {
+				continue; }
 			foreach ( $caps as $cap ) {
-				if ( 'editor' === $role_name && in_array( $cap, array( 'ntc_manage_settings', 'ntc_migrate' ), true ) ) { continue; }
+				if ( 'editor' === $role_name && in_array( $cap, array( 'ntc_manage_settings', 'ntc_migrate' ), true ) ) {
+					continue; }
 				$role->add_cap( $cap );
 			}
 		}
@@ -113,10 +132,11 @@ final class NTC_Activator {
 		global $wpdb;
 		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'ntc_lt_view_%'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		self::remove_caps();
-		if ( ! get_option( 'ntc_delete_data_on_uninstall', false ) ) { return; }
+		if ( ! get_option( 'ntc_delete_data_on_uninstall', false ) ) {
+			return; }
 		global $wpdb;
 		foreach ( array( 'ntc_rows', 'ntc_views', 'ntc_presets', 'ntc_datasets', 'ntc_backups' ) as $suffix ) {
-			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$suffix}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$suffix}" ); // phpcs:ignore WordPress.DB.PreparedSQL -- table names are internal identifiers, cannot be prepared.
 		}
 		delete_option( 'ntc_db_version' );
 		delete_option( 'ntc_delete_data_on_uninstall' );
@@ -128,14 +148,21 @@ final class NTC_Activator {
 
 	private static function remove_caps(): void {
 		$caps = array(
-			'ntc_create_datasets', 'ntc_edit_datasets', 'ntc_delete_datasets',
-			'ntc_manage_presets', 'ntc_import', 'ntc_export', 'ntc_manage_settings', 'ntc_migrate',
+			'ntc_create_datasets',
+			'ntc_edit_datasets',
+			'ntc_delete_datasets',
+			'ntc_manage_presets',
+			'ntc_import',
+			'ntc_export',
+			'ntc_manage_settings',
+			'ntc_migrate',
 		);
 		foreach ( array( 'administrator', 'editor' ) as $role_name ) {
 			$role = get_role( $role_name );
-			if ( ! $role ) { continue; }
-			foreach ( $caps as $cap ) { $role->remove_cap( $cap ); }
+			if ( ! $role ) {
+				continue; }
+			foreach ( $caps as $cap ) {
+				$role->remove_cap( $cap ); }
 		}
 	}
-
 }

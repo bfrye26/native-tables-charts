@@ -1,13 +1,19 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 require dirname( __DIR__ ) . '/native-tables-charts.php';
-$fails = 0;
-$assert = function ( $cond, $label ) use ( &$fails ) { if ( $cond ) { echo "ok   $label\n"; } else { echo "FAIL $label\n"; $fails++; } };
+$fails  = 0;
+$assert = function ( $cond, $label ) use ( &$fails ) {
+	if ( $cond ) {
+		echo "ok   $label\n";
+	} else {
+		echo "FAIL $label\n";
+		++$fails;
+	} };
 $assert( "'=SUM(A1)" === NTC_REST::guard_csv_cell( '=SUM(A1)' ), 'guard prefixes =' );
 $assert( 'hello' === NTC_REST::guard_csv_cell( 'hello' ), 'guard passthrough' );
 $assert( '-12.5' === NTC_REST::guard_csv_cell( '-12.5' ), 'guard keeps plain negative numbers' );
 $GLOBALS['fake_slug_taken'] = true;
-$repo = new NTC_Repository();
+$repo                       = new NTC_Repository();
 $repo->create_preset( 'table', 'My Style', array() );
 $assert( 'my-style-2' === $GLOBALS['wpdb']->last_insert['slug'], 'slug collision suffixes -2' );
 $GLOBALS['fake_slug_taken'] = false;
@@ -24,20 +30,68 @@ $assert( 'boom' === $GLOBALS['last_update'][0]['source_error'], 'record_sync sto
 $parsed = NTC_Sync::parse( $repo, "Name,Score\nA,10\nB,20", 'csv' );
 $assert( 2 === count( $parsed['columns'] ) && 2 === count( $parsed['rows'] ), 'csv parse columns/rows' );
 $assert( 'A' === $parsed['rows'][0][0], 'csv parse first cell' );
-$GLOBALS['fake_http'] = array( 'response' => array( 'code' => 200 ), 'body' => "a,b\n1,2" );
+$GLOBALS['fake_http'] = array(
+	'response' => array( 'code' => 200 ),
+	'body'     => "a,b\n1,2",
+);
 $assert( "a,b\n1,2" === NTC_Sync::fetch( 'https://example.com/x.csv' ), 'fetch returns body' );
-$GLOBALS['fake_http'] = array( 'response' => array( 'code' => 404 ), 'body' => '' );
-$threw = false;
-try { NTC_Sync::fetch( 'https://example.com/x.csv' ); } catch ( Throwable $e ) { $threw = true; }
+$GLOBALS['fake_http'] = array(
+	'response' => array( 'code' => 404 ),
+	'body'     => '',
+);
+$threw                = false;
+try {
+	NTC_Sync::fetch( 'https://example.com/x.csv' );
+} catch ( Throwable $e ) {
+	$threw = true; }
 $assert( $threw, 'fetch throws on 404' );
-$r = ( new ReflectionClass( 'NTC_Renderer' ) )->newInstanceWithoutConstructor();
-$call = function ( string $m, ...$a ) use ( $r ) { $mm = ( new ReflectionClass( 'NTC_Renderer' ) )->getMethod( $m ); $mm->setAccessible( true ); return $mm->invokeArgs( $r, $a ); };
+$r    = ( new ReflectionClass( 'NTC_Renderer' ) )->newInstanceWithoutConstructor();
+$call = function ( string $m, ...$a ) use ( $r ) {
+	$mm = ( new ReflectionClass( 'NTC_Renderer' ) )->getMethod( $m );
+	$mm->setAccessible( true );
+	return $mm->invokeArgs( $r, $a );
+};
 $assert( '' === $call( 'schema_json', array( 'dataset_updated_at' => '2026-08-17 10:00:00' ), array( 'enableSchema' => false ), array() ), 'schema off returns empty' );
-$schema = $call( 'schema_json', array( 'dataset_updated_at' => '2026-08-17 10:00:00', 'dataset_name' => 'Scores' ), array( 'enableSchema' => true, 'title' => 'Bench', 'valueColumns' => array( 1 ) ), array( array(), array( 'label' => 'Score', 'type' => 'number', 'unit' => 'fps' ) ) );
+$schema = $call(
+	'schema_json',
+	array(
+		'dataset_updated_at' => '2026-08-17 10:00:00',
+		'dataset_name'       => 'Scores',
+	),
+	array(
+		'enableSchema' => true,
+		'title'        => 'Bench',
+		'valueColumns' => array( 1 ),
+	),
+	array(
+		array(),
+		array(
+			'label' => 'Score',
+			'type'  => 'number',
+			'unit'  => 'fps',
+		),
+	)
+);
 $assert( false !== strpos( $schema, '"@type":"Dataset"' ) && false !== strpos( $schema, 'variableMeasured' ), 'schema emits Dataset + variables' );
 $assert( false === strpos( $schema, '</script><script' ), 'schema values escaped' );
 $assert( '' === $call( 'updated_date_html', array( 'showUpdatedDate' => false ), array( 'dataset_updated_at' => 'x' ) ), 'updated date off returns empty' );
-$xss_schema = $call( 'schema_json', array( 'dataset_updated_at' => '2026-08-17 10:00:00' ), array( 'enableSchema' => true, 'title' => 'Bench', 'valueColumns' => array( 1 ) ), array( array(), array( 'label' => '</script><script>alert(1)</script>', 'type' => 'number', 'unit' => 'fps' ) ) );
+$xss_schema = $call(
+	'schema_json',
+	array( 'dataset_updated_at' => '2026-08-17 10:00:00' ),
+	array(
+		'enableSchema' => true,
+		'title'        => 'Bench',
+		'valueColumns' => array( 1 ),
+	),
+	array(
+		array(),
+		array(
+			'label' => '</script><script>alert(1)</script>',
+			'type'  => 'number',
+			'unit'  => 'fps',
+		),
+	)
+);
 $assert( false === strpos( $xss_schema, '<script>alert' ), 'schema_json escapes column label script tag' );
 $assert( false !== strpos( $xss_schema, '&lt;' ), 'schema_json emits escaped entities for label' );
 $updated = $call( 'updated_date_html', array( 'showUpdatedDate' => true ), array( 'dataset_updated_at' => '2026-08-17 10:00:00' ) );
@@ -45,18 +99,94 @@ $assert( false !== strpos( $updated, 'Last updated:' ), 'updated date renders La
 $assert( false !== strpos( $updated, '2026-08-17 10:00:00' ), 'updated date includes raw datetime' );
 $assert( 'redbackground:url(x)' === $call( 'safe_css_value', 'red;background:url(x)' ), 'safe_css_value strips ; {}<>' );
 $assert( '' === $call( 'css_length', '100%;background:red' ), 'css_length rejects injection' );
-$heat_cfg = array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 1 ), 'heatmap' => true, 'background' => '#ffffff', 'color' => '#000000' ) ) );
+$heat_cfg = array(
+	'autoColorRules' => array(
+		array(
+			'type'       => 'column',
+			'indexes'    => array( 1 ),
+			'heatmap'    => true,
+			'background' => '#ffffff',
+			'color'      => '#000000',
+		),
+	),
+);
 $assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '50', array( 1 => array( 0, 100 ) ) ), 'background-color:#808080' ), 'heatmap midpoint' );
 $assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '0', array( 1 => array( 0, 100 ) ) ), 'background-color:#ffffff' ), 'heatmap low bound' );
 $assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '100', array( 1 => array( 0, 100 ) ) ), 'background-color:#000000' ), 'heatmap high bound' );
 $assert( false === strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, 'n/a', array( 1 => array( 0, 100 ) ) ), 'background-color' ), 'heatmap skips non-numeric cells' );
-$heat_stats = $call( 'heatmap_stats', array( array( 10 ), array( 20 ), array( 'n/a' ) ), array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 0 ), 'heatmap' => true ) ) ), array() );
-$assert( isset( $heat_stats[0] ) && 10.0 == $heat_stats[0][0] && 20.0 == $heat_stats[0][1], 'heatmap stats exclude non-numeric cells' );
-$heat_neg_stats = $call( 'heatmap_stats', array( array( -100 ), array( -50 ) ), array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 0 ), 'heatmap' => true ) ) ), array() );
-$assert( isset( $heat_neg_stats[0] ) && -100.0 == $heat_neg_stats[0][0] && -50.0 == $heat_neg_stats[0][1], 'heatmap stats min/max on all-negative column' );
-$heat_neg_cfg = array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 0 ), 'heatmap' => true, 'background' => '#ffffff', 'color' => '#000000' ) ) );
+$heat_stats = $call(
+	'heatmap_stats',
+	array( array( 10 ), array( 20 ), array( 'n/a' ) ),
+	array(
+		'autoColorRules' => array(
+			array(
+				'type'    => 'column',
+				'indexes' => array( 0 ),
+				'heatmap' => true,
+			),
+		),
+	),
+	array()
+);
+$assert( isset( $heat_stats[0] ) && 10.0 === $heat_stats[0][0] && 20.0 === $heat_stats[0][1], 'heatmap stats exclude non-numeric cells' );
+$heat_neg_stats = $call(
+	'heatmap_stats',
+	array( array( -100 ), array( -50 ) ),
+	array(
+		'autoColorRules' => array(
+			array(
+				'type'    => 'column',
+				'indexes' => array( 0 ),
+				'heatmap' => true,
+			),
+		),
+	),
+	array()
+);
+$assert( isset( $heat_neg_stats[0] ) && -100.0 === $heat_neg_stats[0][0] && -50.0 === $heat_neg_stats[0][1], 'heatmap stats min/max on all-negative column' );
+$heat_neg_cfg = array(
+	'autoColorRules' => array(
+		array(
+			'type'       => 'column',
+			'indexes'    => array( 0 ),
+			'heatmap'    => true,
+			'background' => '#ffffff',
+			'color'      => '#000000',
+		),
+	),
+);
 $assert( false !== strpos( $call( 'cell_style', array(), $heat_neg_cfg, 0, 0, '-50', array( 0 => array( -100, -50 ) ) ), 'background-color:#000000' ), 'heatmap high bound on all-negative column' );
-$table_html = $call( 'render_table', array( 'columns' => array( array( 'id' => 'c1', 'label' => 'A', 'type' => 'auto', 'unit' => '' ), array( 'id' => 'c2', 'label' => 'B', 'type' => 'auto', 'unit' => '' ) ), 'rows' => array( array( 'a', 20 ), array( 'b', 'n/a' ) ), 'config' => array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 1 ), 'heatmap' => true, 'background' => '#ffffff', 'color' => '#000000' ) ) ) ) );
+$table_html = $call(
+	'render_table',
+	array(
+		'columns' => array(
+			array(
+				'id'    => 'c1',
+				'label' => 'A',
+				'type'  => 'auto',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c2',
+				'label' => 'B',
+				'type'  => 'auto',
+				'unit'  => '',
+			),
+		),
+		'rows'    => array( array( 'a', 20 ), array( 'b', 'n/a' ) ),
+		'config'  => array(
+			'autoColorRules' => array(
+				array(
+					'type'       => 'column',
+					'indexes'    => array( 1 ),
+					'heatmap'    => true,
+					'background' => '#ffffff',
+					'color'      => '#000000',
+				),
+			),
+		),
+	)
+);
 $assert( false !== strpos( $table_html, '<thead' ) && false !== strpos( $table_html, '<tbody' ), 'render_table computes heat before header' );
 $assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '<svg' ), 'sparkline renders svg' );
 $assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '10,20,30' ), 'sparkline keeps raw value (sr-only)' );
@@ -64,7 +194,12 @@ $assert( false !== strpos( $call( 'render_cell', '+12.5%', array(), array(), fal
 $assert( false !== strpos( $call( 'render_cell', '-3', array(), array(), false, 'delta' ), 'is-down' ), 'delta negative class' );
 $ntc = NTC_Plugin::instance();
 $assert( '' === $ntc->shortcode_dataset( array( 'id' => 0 ) ), 'shortcode empty without id' );
-$out = $ntc->shortcode_dataset( array( 'id' => 99, 'type' => 'table' ) );
+$out = $ntc->shortcode_dataset(
+	array(
+		'id'   => 99,
+		'type' => 'table',
+	)
+);
 $assert( false !== strpos( $out, 'ntc-table-wrap' ), 'shortcode renders table markup' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );
