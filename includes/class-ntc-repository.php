@@ -66,6 +66,27 @@ final class NTC_Repository {
 		return false !== $wpdb->delete( $wpdb->prefix . 'ntc_datasets', array( 'id' => $id ), array( '%d' ) );
 	}
 
+	public function get_source( int $id ): ?array {
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT source_url,source_last_sync,source_error FROM {$wpdb->prefix}ntc_datasets WHERE id=%d", $id ), ARRAY_A );
+		return $row ?: null;
+	}
+
+	public function set_source( int $id, string $url ): bool {
+		global $wpdb;
+		$url = trim( $url );
+		if ( '' !== $url && ! preg_match( '#^https?://#i', $url ) ) { $url = ''; }
+		return false !== $wpdb->update( $wpdb->prefix . 'ntc_datasets', array( 'source_url' => $url ), array( 'id' => $id ), array( '%s' ), array( '%d' ) );
+	}
+
+	public function record_sync( int $id, string $error = '' ): bool {
+		global $wpdb;
+		return false !== $wpdb->update( $wpdb->prefix . 'ntc_datasets', array(
+			'source_last_sync' => current_time( 'mysql', true ),
+			'source_error' => '' !== $error ? $error : null,
+		), array( 'id' => $id ), array( '%s', '%s' ), array( '%d' ) );
+	}
+
 	public function get_rows( int $dataset_id, int $limit = 0, int $offset = 0 ): array {
 		global $wpdb;
 		$sql = $wpdb->prepare( "SELECT row_index,row_json FROM {$wpdb->prefix}ntc_rows WHERE dataset_id=%d ORDER BY row_index ASC", $dataset_id );
