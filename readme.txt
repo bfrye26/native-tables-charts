@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -181,6 +181,11 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 1.1.1 =
+* Replaced the dataset/view picker with a selectable list (select + confirm, double-click to pick immediately).
+* Batched multi-row dataset writes — up to 500 rows per INSERT statement, dramatically faster imports, migration and XML import.
+* League Table migration and rollback now process posts in bounded chunks with automatic resumption and progress display, avoiding PHP timeouts on large sites.
 
 = 1.1.0 =
 * New opt-in features: Schema.org Dataset JSON-LD, sparkline and delta-badge column types, frontend table search and pagination, heatmap colour scales, remote CSV/TSV dataset sync via WP-Cron, automatic dark chart theme, frontend CSV/PNG export buttons, classic-editor `[ntc_dataset]` shortcode, and last-updated captions for dataset-backed blocks.

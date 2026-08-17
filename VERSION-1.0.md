@@ -440,6 +440,12 @@ This build environment does not contain a complete running WordPress installatio
 - The focus button now exposes `aria-pressed` for assistive technology.
 
 
+## 1.1.1 picker list and migration batching
+
+- The dataset/view picker is now a selectable list: click to select, double-click or "Use selection" to confirm, with row counts shown beside dataset names.
+- Reusable-dataset row writes are batched into 500-row INSERT statements (previously one statement per row), making CSV/TSV/XML imports and League Table migration several times faster.
+- League Table migration and rollback now convert or restore up to 200 posts per request, auto-resuming in the browser with a live progress notice, so large sites no longer hit PHP execution timeouts.
+
 ## 1.0.8 hardening and cleanup
 
 - Added a GPLv2 `license.txt` and enabled block-editor JavaScript translations via `wp_set_script_translations`.
