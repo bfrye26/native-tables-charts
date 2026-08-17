@@ -68,23 +68,8 @@ final class NTC_REST {
 
 	public function import_data(WP_REST_Request $r){
 		$p=(array)$r->get_json_params();$format=sanitize_key($p['format']??'csv');$raw=(string)($p['data']??'');$name=(string)($p['name']??__('Imported Dataset','native-tables-charts'));
-		try{$parsed=$this->parse_import($raw,$format);}catch(Exception $e){return new WP_Error('ntc_import_error',$e->getMessage(),array('status'=>400));}
+		try { $parsed = NTC_Sync::parse( $this->repo, $raw, $format ); } catch ( Exception $e ) { return new WP_Error( 'ntc_import_error', $e->getMessage(), array( 'status' => 400 ) ); }
 		$id=$this->repo->create_dataset($name,$parsed['columns'],$parsed['rows']);return rest_ensure_response(array('id'=>$id,'columns'=>$parsed['columns'],'rows'=>$parsed['rows']));
-	}
-
-	private function parse_import(string $raw,string $format): array {
-		if('json'===$format){
-			$data=json_decode($raw,true);if(!is_array($data))throw new Exception(__('Invalid JSON.','native-tables-charts'));
-			if(isset($data['columns'],$data['rows'])){
-				$cols=$this->repo->sanitize_columns((array)$data['columns']);$width=count($cols);$rows=array_slice((array)$data['rows'],0,10000);
-				$rows=array_map(fn($row)=>array_slice(array_pad((array)$row,$width,''),0,$width),$rows);
-				return array('columns'=>$cols,'rows'=>$rows);
-			}
-			$rows=array_slice(array_values($data),0,10000);if(!$rows)return array('columns'=>array(),'rows'=>array());
-			if(array_is_list($rows[0])){$width=min(40,count($rows[0]));if($width<1)return array('columns'=>array(),'rows'=>array());$cols=array_map(fn($i)=>array('id'=>'c'.($i+1),'label'=>'Column '.($i+1),'type'=>'auto','unit'=>''),range(0,$width-1));$rows=array_map(fn($row)=>array_slice(array_pad((array)$row,$width,''),0,$width),$rows);return array('columns'=>$cols,'rows'=>$rows);}
-			$keys=array_slice(array_keys((array)$rows[0]),0,40);$cols=array_map(fn($k)=>array('id'=>sanitize_key((string)$k),'label'=>sanitize_text_field((string)$k),'type'=>'auto','unit'=>''),$keys);return array('columns'=>$cols,'rows'=>array_map(fn($r)=>array_map(fn($k)=>(array_key_exists($k,(array)$r)?$r[$k]:''),$keys),$rows));
-		}
-		$delimiter='tsv'===$format?"	":',';$matrix=array();$fh=fopen('php://temp','r+');if(false===$fh)throw new Exception(__('Could not parse the import.','native-tables-charts'));fwrite($fh,$raw);rewind($fh);while(($record=fgetcsv($fh,0,$delimiter,'"',''))!==false){if(count($record)===1&&trim((string)$record[0])==='')continue;$matrix[]=$record;if(count($matrix)>10001)break;}fclose($fh);if(!$matrix)return array('columns'=>array(),'rows'=>array());$header=array_shift($matrix);$header=array_slice($header,0,40);$cols=array();foreach($header as $i=>$h)$cols[]=array('id'=>sanitize_key($h?:'c'.($i+1)),'label'=>sanitize_text_field($h?:'Column '.($i+1)),'type'=>'auto','unit'=>'');$width=count($cols);$rows=array_slice(array_map(fn($row)=>array_slice(array_pad((array)$row,$width,''),0,$width),$matrix),0,10000);return array('columns'=>$cols,'rows'=>$rows);
 	}
 
 	public static function guard_csv_cell( string $cell ): string {

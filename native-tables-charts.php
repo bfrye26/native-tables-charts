@@ -21,6 +21,7 @@ define( 'NTC_URL', plugin_dir_url( __FILE__ ) );
 require_once NTC_DIR . 'includes/class-ntc-activator.php';
 require_once NTC_DIR . 'includes/class-ntc-repository.php';
 require_once NTC_DIR . 'includes/class-ntc-formulas.php';
+require_once NTC_DIR . 'includes/class-ntc-sync.php';
 require_once NTC_DIR . 'includes/class-ntc-renderer.php';
 require_once NTC_DIR . 'includes/class-ntc-rest.php';
 require_once NTC_DIR . 'includes/class-ntc-admin.php';

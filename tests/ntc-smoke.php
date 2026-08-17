@@ -24,5 +24,15 @@ $repo->set_source( 1, 'https://example.com/data.csv' );
 $assert( 'https://example.com/data.csv' === $GLOBALS['last_update'][0]['source_url'], 'set_source accepts https URL' );
 $repo->record_sync( 1, 'boom' );
 $assert( 'boom' === $GLOBALS['last_update'][0]['source_error'], 'record_sync stores error' );
+require dirname( __DIR__ ) . '/includes/class-ntc-sync.php';
+$parsed = NTC_Sync::parse( $repo, "Name,Score\nA,10\nB,20", 'csv' );
+$assert( 2 === count( $parsed['columns'] ) && 2 === count( $parsed['rows'] ), 'csv parse columns/rows' );
+$assert( 'A' === $parsed['rows'][0][0], 'csv parse first cell' );
+$GLOBALS['fake_http'] = array( 'response' => array( 'code' => 200 ), 'body' => "a,b\n1,2" );
+$assert( "a,b\n1,2" === NTC_Sync::fetch( 'https://example.com/x.csv' ), 'fetch returns body' );
+$GLOBALS['fake_http'] = array( 'response' => array( 'code' => 404 ), 'body' => '' );
+$threw = false;
+try { NTC_Sync::fetch( 'https://example.com/x.csv' ); } catch ( Throwable $e ) { $threw = true; }
+$assert( $threw, 'fetch throws on 404' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

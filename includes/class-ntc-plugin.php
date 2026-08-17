@@ -18,6 +18,7 @@ final class NTC_Plugin {
 		if ( get_option( 'ntc_db_version' ) !== NTC_VERSION ) { NTC_Activator::activate(); }
 		add_action('init',array($this,'register_assets_and_blocks'));
 		add_action('rest_api_init',array(new NTC_REST($this->repo),'register'));
+		NTC_Sync::register();
 		add_action('admin_menu',array($this->admin,'register_menu'));
 		add_action('admin_enqueue_scripts',array($this->admin,'admin_assets'));
 		add_action('admin_init',array($this->admin,'handle_actions'));
