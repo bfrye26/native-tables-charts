@@ -101,6 +101,7 @@ $assert( false !== strpos( $updated, 'Last updated:' ), 'updated date renders La
 $assert( false !== strpos( $updated, '2026-08-17 10:00:00' ), 'updated date includes raw datetime' );
 $assert( 'redbackground:url(x)' === $call( 'safe_css_value', 'red;background:url(x)' ), 'safe_css_value strips ; {}<>' );
 $assert( '' === $call( 'css_length', '100%;background:red' ), 'css_length rejects injection' );
+$assert( false !== strpos( $call( 'tip_text', 'GPU', '100', array( 'unit' => 'fps' ), array() ), 'GPU: 100 fps' ), 'tip_text formats value with unit' );
 $heat_cfg = array(
 	'autoColorRules' => array(
 		array(

@@ -97,6 +97,16 @@ function ntcBindChart(fig){
 			img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
 		}catch(e){}
 	});
+var tip=document.createElement('div');tip.className='ntc-tooltip';fig.appendChild(tip);
+var showTip=function(el){
+	var t=el.getAttribute&&el.getAttribute('data-tip');if(!t)return;
+	tip.textContent=t;tip.style.display='block';
+	var r=el.getBoundingClientRect(),fr=fig.getBoundingClientRect();
+	tip.style.left=Math.max(0,Math.min(fr.width-tip.offsetWidth-4,r.left-fr.left+r.width/2-tip.offsetWidth/2))+'px';
+	tip.style.top=Math.max(0,r.top-fr.top-tip.offsetHeight-8)+'px';
+};
+fig.addEventListener('mouseover',function(e){var el=e.target.closest('[data-tip]');if(el)showTip(el);});
+fig.addEventListener('mouseout',function(e){if(e.target.closest('[data-tip]'))tip.style.display='none';});
 }
 document.addEventListener('DOMContentLoaded',function(){
 	document.querySelectorAll('.ntc-table').forEach(ntcBindTable);

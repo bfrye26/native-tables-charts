@@ -17,6 +17,8 @@ function absint( $v ) {
 	return abs( (int) $v ); }
 function esc_attr( $v ) {
 	return htmlspecialchars( (string) $v, ENT_QUOTES ); }
+function number_format_i18n( $number, $decimals = 0 ) {
+	return number_format( (float) $number, $decimals ); }
 function esc_html( $v ) {
 	return htmlspecialchars( (string) $v, ENT_QUOTES ); }
 function esc_url( $v ) {

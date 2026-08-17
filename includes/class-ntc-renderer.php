@@ -174,6 +174,7 @@ final class NTC_Renderer {
 			'accessibleDataMode'      => 'screenreader',
 			'customClass'             => '',
 			'enableExport'            => false,
+			'enableTooltips'          => false,
 			'enableSchema'            => false,
 			'themeMode'               => 'fixed',
 			'darkBackground'          => '#0f131a',
@@ -1280,13 +1281,16 @@ final class NTC_Renderer {
 		return in_array( (string) $label, array_map( 'strval', (array) $c['highlightValues'] ), true );}
 	private function format_value( $v, array $c, array $col = array() ): string {
 		$n   = NTC_Formulas::numeric( $v );
-		$dec = $c['decimals'];
+		$dec = $c['decimals'] ?? 'auto';
 		if ( 'auto' === $dec ) {
 			$d = ( (float) (int) $n === $n ) ? 0 : 1;
 		} else {
 			$d = max( 0, min( 6, absint( $dec ) ) );
 		}$unit = (string) ( $col['unit'] ?? $c['unit'] ?? '' );
 		return number_format_i18n( $n, $d ) . ( '' !== $unit ? ' ' . $unit : '' );}
+	private function tip_text( $label, $value, $column, array $c ): string {
+		return esc_attr( (string) $label . ': ' . $this->format_value( $value, $c, is_array( $column ) ? $column : array() ) );
+	}
 	private function max_for( array $rows, int $col ): float {
 		$max = 0;
 		foreach ( $rows as $r ) {
@@ -1329,7 +1333,7 @@ final class NTC_Renderer {
 			$pct   = max( 0, min( 100, ( $val / $max ) * 100 ) );
 			$hl    = $this->is_highlight( $label, $c );
 			$aria  = $label . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() );
-			$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span></div>';
+			$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span></div>';
 			if ( $c['showValues'] ) {
 				$out .= '<div class="ntc-hbar-value">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</div>';
 			}$out .= '</div>';}
@@ -1352,7 +1356,7 @@ final class NTC_Renderer {
 				$pct   = max( 0, min( 100, ( $val / $max ) * 100 ) );
 				$hl    = $this->is_highlight( $label, $c );
 				$aria  = $label . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() );
-				$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span></div>';
+				$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span></div>';
 				if ( $c['showValues'] ) {
 					$out .= '<div class="ntc-hbar-value">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</div>';
 				}$out .= '</div>';
@@ -1370,7 +1374,7 @@ final class NTC_Renderer {
 			$val   = NTC_Formulas::numeric( $r[ $v ] ?? 0 );
 			$pct   = max( 1, min( 100, ( $val / $max ) * 100 ) );
 			$aria  = $label . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() );
-			$out  .= '<div class="ntc-vbar-item' . ( $this->is_highlight( $label, $c ) ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '">';
+			$out  .= '<div class="ntc-vbar-item' . ( $this->is_highlight( $label, $c ) ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '>';
 			if ( $c['showValues'] ) {
 				$out .= '<div class="ntc-vbar-value">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</div>';
 			} else {
@@ -1406,7 +1410,7 @@ final class NTC_Renderer {
 				foreach ( $vals as $si => $v ) {
 						$val  = NTC_Formulas::numeric( $r[ $v ] ?? 0 );
 						$pct  = max( 0, min( 100, ( $val / $max ) * 100 ) );
-						$out .= '<div class="ntc-group-bar"><span class="ntc-series-' . ( $si % 6 ) . '" style="width:' . esc_attr( $pct ) . '%"></span>';
+						$out .= '<div class="ntc-group-bar"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><span class="ntc-series-' . ( $si % 6 ) . '" style="width:' . esc_attr( $pct ) . '%"></span>';
 					if ( $c['showValues'] ) {
 						$out .= '<em>' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</em>';
 					}$out .= '</div>';
@@ -1457,7 +1461,7 @@ final class NTC_Renderer {
 				$out .= '<polyline points="' . $poly . '" class="ntc-svg-line" style="stroke:' . $colors[ $si % count( $colors ) ] . '" fill="none"/>';
 			}
 			foreach ( $pts as $p ) {
-				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point" style="fill:' . $colors[ $si % count( $colors ) ] . '"><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';}
+				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point" style="fill:' . $colors[ $si % count( $colors ) ] . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2], $p[3], $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';}
 		}
 		foreach ( $rows as $i => $r ) {
 			$x    = $pad_l + ( $pw * ( $i / $n ) );
@@ -1482,7 +1486,7 @@ final class NTC_Renderer {
 			$len       = $circ * ( $val / $sum );
 			$hl        = $this->is_highlight( (string) ( $row[ $l ] ?? '' ), $c );
 			$seg_color = $hl ? 'var(--ntc-highlight)' : $colors[ $i % count( $colors ) ];
-			$out      .= '<circle cx="160" cy="160" r="' . $r . '" class="ntc-donut-seg' . ( $hl ? ' is-highlight' : '' ) . '" style="stroke:' . $seg_color . ';stroke-dasharray:' . $len . ' ' . ( $circ - $len ) . ';stroke-dashoffset:-' . $offset . '"><title>' . esc_html( ( $row[ $l ] ?? '' ) . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
+			$out      .= '<circle cx="160" cy="160" r="' . $r . '" class="ntc-donut-seg' . ( $hl ? ' is-highlight' : '' ) . '" style="stroke:' . $seg_color . ';stroke-dasharray:' . $len . ' ' . ( $circ - $len ) . ';stroke-dashoffset:-' . $offset . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( (string) ( $row[ $l ] ?? '' ), $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><title>' . esc_html( ( $row[ $l ] ?? '' ) . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
 			$offset   += $len;
 		}$out .= '</svg><div class="ntc-donut-legend">';
 		foreach ( $rows as $i => $row ) {
@@ -1491,7 +1495,7 @@ final class NTC_Renderer {
 				$legend .= ' — ' . $this->format_value( $row[ $v ] ?? 0, $c, $columns[ $v ] ?? array() );
 			}$hl          = $this->is_highlight( (string) ( $row[ $l ] ?? '' ), $c );
 			$legend_color = $hl ? 'var(--ntc-highlight)' : $colors[ $i % count( $colors ) ];
-			$out         .= '<span class="' . ( $hl ? 'is-highlight' : '' ) . '"><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</span>';
+			$out         .= '<span class="' . ( $hl ? 'is-highlight' : '' ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( (string) ( $row[ $l ] ?? '' ), $row[ $v ] ?? 0, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</span>';
 		}$out .= '</div></div>';
 		return $out;
 	}
