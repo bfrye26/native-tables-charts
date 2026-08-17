@@ -62,5 +62,9 @@ $heat_neg_cfg = array( 'autoColorRules' => array( array( 'type' => 'column', 'in
 $assert( false !== strpos( $call( 'cell_style', array(), $heat_neg_cfg, 0, 0, '-50', array( 0 => array( -100, -50 ) ) ), 'background-color:#000000' ), 'heatmap high bound on all-negative column' );
 $table_html = $call( 'render_table', array( 'columns' => array( array( 'id' => 'c1', 'label' => 'A', 'type' => 'auto', 'unit' => '' ), array( 'id' => 'c2', 'label' => 'B', 'type' => 'auto', 'unit' => '' ) ), 'rows' => array( array( 'a', 20 ), array( 'b', 'n/a' ) ), 'config' => array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 1 ), 'heatmap' => true, 'background' => '#ffffff', 'color' => '#000000' ) ) ) ) );
 $assert( false !== strpos( $table_html, '<thead' ) && false !== strpos( $table_html, '<tbody' ), 'render_table computes heat before header' );
+$assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '<svg' ), 'sparkline renders svg' );
+$assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '10,20,30' ), 'sparkline keeps raw value (sr-only)' );
+$assert( false !== strpos( $call( 'render_cell', '+12.5%', array(), array(), false, 'delta' ), 'is-up' ), 'delta positive class' );
+$assert( false !== strpos( $call( 'render_cell', '-3', array(), array(), false, 'delta' ), 'is-down' ), 'delta negative class' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

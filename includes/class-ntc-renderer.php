@@ -193,7 +193,7 @@ final class NTC_Renderer {
 				$hrowspan=!empty($config['enableSorting'])?1:max(1,absint($hmeta['rowspan']??1));$hcolspan=!empty($config['enableSorting'])?1:max(1,absint($hmeta['colspan']??1));
 				if($hcolspan>1){for($hc=$ci+1;$hc<$ci+$hcolspan;$hc++){$header_skip[$hc]=true;}}
 				$hstyle=$this->cell_style($hmeta,$config,-1,$ci,'',$heat);$hattrs=' scope="col" data-col="'.esc_attr($ci).'"'.((!empty($config['enableSorting'])&&!empty($config['enableManualSorting']))?' aria-sort="none"':'');if($hstyle)$hattrs.=' style="'.esc_attr($hstyle).'"';if($hrowspan>1)$hattrs.=' rowspan="'.$hrowspan.'"';if($hcolspan>1)$hattrs.=' colspan="'.$hcolspan.'"';
-				$out.='<th'.$hattrs.'>';if(!empty($config['enableSorting'])&&!empty($config['enableManualSorting'])){$out.='<button type="button" class="ntc-sort" data-column="'.esc_attr($ci).'" aria-sort="none">'.$this->render_cell($label,$hmeta,$config,true).'<span aria-hidden="true" class="ntc-sort-icon">↕</span></button>';}else{$out.=$this->render_cell($label,$hmeta,$config,true);} $out.='</th>';
+				$out.='<th'.$hattrs.'>';if(!empty($config['enableSorting'])&&!empty($config['enableManualSorting'])){$out.='<button type="button" class="ntc-sort" data-column="'.esc_attr($ci).'" aria-sort="none">'.$this->render_cell($label,$hmeta,$config,true,$config['columnTypes'][$ci]??$col['type']??'auto').'<span aria-hidden="true" class="ntc-sort-icon">↕</span></button>';}else{$out.=$this->render_cell($label,$hmeta,$config,true,$config['columnTypes'][$ci]??$col['type']??'auto');} $out.='</th>';
 			}
 			if(!empty($config['showPosition']) && 'right'===$config['positionSide']){$out.='<th scope="col" class="ntc-position-head">'.esc_html($config['positionLabel']).'</th>';}
 			$out.='</tr></thead>';
@@ -217,7 +217,7 @@ final class NTC_Renderer {
 				$attrs=' data-label="'.esc_attr($col['label']??'').'" data-sort="'.esc_attr($sort).'"';
 				if($rowspan>1){$attrs.=' rowspan="'.$rowspan.'"';}if($colspan>1){$attrs.=' colspan="'.$colspan.'"';}
 				if($style){$attrs.=' style="'.esc_attr($style).'"';}
-				$out.='<td'.$attrs.'>'.$this->render_cell($value,$meta,$config).'</td>';
+				$out.='<td'.$attrs.'>'.$this->render_cell($value,$meta,$config,false,$type).'</td>';
 			}
 			if(!empty($config['showPosition']) && 'right'===$config['positionSide']){$out.='<th scope="row" class="ntc-position">'.esc_html($ri+1).'</th>';}
 			$out.='</tr>';
@@ -229,10 +229,38 @@ final class NTC_Renderer {
 		return $out;
 	}
 
-	private function render_cell($value,array $meta,array $config,bool $header=false): string {
+	private function render_cell($value,array $meta,array $config,bool $header=false,string $type='auto'): string {
 		// League Table treats custom HTML as the final cell payload rather than combining it with links/images.
 		if(!empty($meta['html'])){return $this->sanitize_cell_html((string)$meta['html']);}
 		if(!empty($meta['htmlContent'])){return $this->sanitize_cell_html((string)$meta['htmlContent']);}
+		if ( 'sparkline' === $type ) {
+			$nums = array();
+			foreach ( preg_split( '/[\s,]+/', trim( wp_strip_all_tags( (string) $value ) ), -1, PREG_SPLIT_NO_EMPTY ) as $v ) {
+				if ( is_numeric( $v ) ) { $nums[] = (float) $v; }
+			}
+			if ( count( $nums ) > 1 ) {
+				$w = 96; $h = 28; $pad = 3;
+				$min = min( $nums ); $max = max( $nums ); $span = ( $max - $min ) ?: 1;
+				$n = count( $nums ); $pts = array();
+				foreach ( $nums as $i => $v ) {
+					$x = $pad + ( $w - 2 * $pad ) * ( $i / ( $n - 1 ) );
+					$y = $h - $pad - ( $h - 2 * $pad ) * ( ( $v - $min ) / $span );
+					$pts[] = round( $x, 1 ) . ',' . round( $y, 1 );
+				}
+				return '<span class="ntc-sparkline" aria-hidden="true"><svg viewBox="0 0 ' . $w . ' ' . $h . '" width="' . $w . '" height="' . $h . '"><polyline points="' . esc_attr( implode( ' ', $pts ) ) . '" fill="none" stroke="currentColor" stroke-width="2"/></svg></span><span class="ntc-sr-only">' . esc_html( (string) $value ) . '</span>';
+			}
+			return esc_html( (string) $value );
+		}
+		if ( 'delta' === $type ) {
+			$plain = trim( wp_strip_all_tags( (string) $value ) );
+			if ( preg_match( '/^([+-]?)([\d.,]+)\s*%?$/', $plain, $m ) ) {
+				$num = (float) ( $m[1] . str_replace( ',', '.', $m[2] ) );
+				$cls = 'ntc-delta ' . ( $num > 0 ? 'is-up' : ( $num < 0 ? 'is-down' : 'is-flat' ) );
+				$glyph = $num > 0 ? '▲' : ( $num < 0 ? '▼' : '—' );
+				return '<span class="' . esc_attr( $cls ) . '">' . esc_html( $glyph . ' ' . $plain ) . '</span>';
+			}
+			return esc_html( $plain );
+		}
 		$content=esc_html((string)$value);
 		$interactive_header=$header&&!empty($config['enableSorting'])&&!empty($config['enableManualSorting']);
 		if(!empty($meta['link'])&&!$interactive_header){$target=!empty($meta['openLinkNewTab'])?' target="_blank" rel="noopener noreferrer"':'';$lc=!empty($meta['linkColor'])?' style="color:'.esc_attr($meta['linkColor']).'"':'';$content='<a href="'.esc_url($meta['link']).'"'.$target.$lc.'>'.$content.'</a>';}

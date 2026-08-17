@@ -64,3 +64,6 @@
 /* v1.0.7 chart data visibility and accessible fallback */
 .ntc-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .ntc-chart-data-visible{padding-top:10px;border-top:1px solid var(--ntc-grid)}.ntc-chart-data-visible h4{margin:0 0 8px;color:var(--ntc-chart-text);font-size:var(--ntc-legend-size)}
+
+/* v1.1.0 sparkline + delta cell types */
+.ntc-sparkline svg{display:block;margin:0 auto}.ntc-delta{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}.ntc-delta.is-up{color:var(--ntc-delta-up,#16a34a)}.ntc-delta.is-down{color:var(--ntc-delta-down,#dc2626)}.ntc-delta.is-flat{color:inherit;opacity:.7}
