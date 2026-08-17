@@ -163,6 +163,7 @@ final class NTC_Renderer {
 		if(empty($config['enableCellProperties'])){$cell_meta=array();}
 		$rows=NTC_Formulas::apply($rows,$columns,$cell_meta,(int)$config['averageDecimals'],(string)$config['averageRound']);
 		$rows=$this->sort_rows($rows,$config,$columns);
+		$heat = $this->heatmap_stats( $rows, $config, $columns );
 		$id=wp_unique_id('ntc-table-');
 		$width_mode=sanitize_key((string)($attributes['widthMode']??''));
 		if(!in_array($width_mode,array('content','wide','full'),true)){
@@ -198,7 +199,6 @@ final class NTC_Renderer {
 			$out.='</tr></thead>';
 		}
 		$out.='<tbody>';
-		$heat = $this->heatmap_stats( $rows, $config, $columns );
 		$skip=array();
 		foreach($rows as $ri=>$row){
 			$meta_ri=isset($row['_ntc_index'])?(int)$row['_ntc_index']:$ri;
@@ -260,6 +260,7 @@ final class NTC_Renderer {
 		foreach ( (array) $config['autoColorRules'] as $rule ) {
 			if ( ! $this->rule_applies( $rule, $ri, $ci ) ) { continue; }
 			if ( ! empty( $rule['heatmap'] ) && 'column' === ( $rule['type'] ?? 'row' ) && isset( $heat[ $ci ] ) ) {
+				if ( ! preg_match( '/^-?[\d.,]+$/', trim( (string) $value ) ) ) { continue; }
 				$n = NTC_Formulas::numeric( $value );
 				$range = $heat[ $ci ];
 				$t = ( $n - $range[0] ) / ( $range[1] - $range[0] );
@@ -301,10 +302,12 @@ final class NTC_Renderer {
 		}
 		if ( ! $heat_cols ) { return array(); }
 		$stats = array();
-		foreach ( $heat_cols as $ci ) { $stats[ $ci ] = array( PHP_FLOAT_MAX, PHP_FLOAT_MIN ); }
-		foreach ( $rows as $row ) {
-			foreach ( $heat_cols as $ci ) {
-				$n = NTC_Formulas::numeric( $row[ $ci ] ?? '' );
+	foreach ( $heat_cols as $ci ) { $stats[ $ci ] = array( PHP_FLOAT_MAX, -PHP_FLOAT_MAX ); }
+	foreach ( $rows as $row ) {
+		foreach ( $heat_cols as $ci ) {
+			$raw = trim( (string) ( $row[ $ci ] ?? '' ) );
+			if ( ! preg_match( '/^-?[\d.,]+$/', $raw ) ) { continue; }
+			$n = NTC_Formulas::numeric( $raw );
 				if ( $n < $stats[ $ci ][0] ) { $stats[ $ci ][0] = $n; }
 				if ( $n > $stats[ $ci ][1] ) { $stats[ $ci ][1] = $n; }
 			}

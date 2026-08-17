@@ -53,5 +53,14 @@ $heat_cfg = array( 'autoColorRules' => array( array( 'type' => 'column', 'indexe
 $assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '50', array( 1 => array( 0, 100 ) ) ), 'background-color:#808080' ), 'heatmap midpoint' );
 $assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '0', array( 1 => array( 0, 100 ) ) ), 'background-color:#ffffff' ), 'heatmap low bound' );
 $assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '100', array( 1 => array( 0, 100 ) ) ), 'background-color:#000000' ), 'heatmap high bound' );
+$assert( false === strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, 'n/a', array( 1 => array( 0, 100 ) ) ), 'background-color' ), 'heatmap skips non-numeric cells' );
+$heat_stats = $call( 'heatmap_stats', array( array( 10 ), array( 20 ), array( 'n/a' ) ), array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 0 ), 'heatmap' => true ) ) ), array() );
+$assert( isset( $heat_stats[0] ) && 10.0 == $heat_stats[0][0] && 20.0 == $heat_stats[0][1], 'heatmap stats exclude non-numeric cells' );
+$heat_neg_stats = $call( 'heatmap_stats', array( array( -100 ), array( -50 ) ), array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 0 ), 'heatmap' => true ) ) ), array() );
+$assert( isset( $heat_neg_stats[0] ) && -100.0 == $heat_neg_stats[0][0] && -50.0 == $heat_neg_stats[0][1], 'heatmap stats min/max on all-negative column' );
+$heat_neg_cfg = array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 0 ), 'heatmap' => true, 'background' => '#ffffff', 'color' => '#000000' ) ) );
+$assert( false !== strpos( $call( 'cell_style', array(), $heat_neg_cfg, 0, 0, '-50', array( 0 => array( -100, -50 ) ) ), 'background-color:#000000' ), 'heatmap high bound on all-negative column' );
+$table_html = $call( 'render_table', array( 'columns' => array( array( 'id' => 'c1', 'label' => 'A', 'type' => 'auto', 'unit' => '' ), array( 'id' => 'c2', 'label' => 'B', 'type' => 'auto', 'unit' => '' ) ), 'rows' => array( array( 'a', 20 ), array( 'b', 'n/a' ) ), 'config' => array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 1 ), 'heatmap' => true, 'background' => '#ffffff', 'color' => '#000000' ) ) ) ) );
+$assert( false !== strpos( $table_html, '<thead' ) && false !== strpos( $table_html, '<tbody' ), 'render_table computes heat before header' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );
