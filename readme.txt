@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 1.0.8
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -181,6 +181,11 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 1.1.0 =
+* New opt-in features: Schema.org Dataset JSON-LD, sparkline and delta-badge column types, frontend table search and pagination, heatmap colour scales, remote CSV/TSV dataset sync via WP-Cron, automatic dark chart theme, frontend CSV/PNG export buttons, classic-editor `[ntc_dataset]` shortcode, and last-updated captions for dataset-backed blocks.
+* Best-practice fixes: REST argument validation, CSV formula-injection guards, preset slug collisions no longer overwrite existing presets, presets list now requires edit capability, view creation validates the dataset, orphan migration options are cleaned up on uninstall, cron events are cleared on deactivate/uninstall, arrow-key navigation in the data grid.
+* All PHP now passes the WordPress-Core coding standard.
 
 = 1.0.8 =
 * Added GPLv2 license.txt and enabled JavaScript translations for the block editor.

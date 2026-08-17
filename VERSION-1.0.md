@@ -247,9 +247,15 @@ Charts render into their own responsive containers. Horizontal and dual-metric b
 ### Chart style presets
 
 - Benchmark Dark
+- Benchmark Light
+- Benchmark Compact
 - Editorial Light
+- Editorial Dark
 - Minimal
+- High Contrast
+- Feature
 - Comparison
+- Technical
 
 ### Inserter templates/variations
 
@@ -455,3 +461,32 @@ This build environment does not contain a complete running WordPress installatio
 - Separated the editor language for Chart Layout from Chart Theme.
 - Added visual preset browsing for table styles as well as chart themes.
 - Increased the default benchmark typography and made small datasets use a more spacious automatic bar layout.
+
+## 1.1.0 features and best practices
+
+Version 1.1.0 adds opt-in editor and front-end features on top of the 1.0 dataset layer, plus a hardening pass. Everything new is enabled per block or per dataset from the editor; existing content keeps its current behaviour.
+
+### New opt-in features
+
+- Schema.org Dataset JSON-LD on dataset-backed blocks for search engines.
+- Sparkline and delta-badge column types in tables.
+- Front-end table search and pagination.
+- Heatmap colour scales.
+- Remote CSV/TSV dataset sync via WP-Cron, plus last-updated captions for dataset-backed blocks.
+- Automatic dark chart theme (adapts to visitor dark-mode preference).
+- Front-end CSV and PNG export buttons.
+- Classic-editor `[ntc_dataset]` shortcode.
+
+### Best-practice fixes
+
+- REST arguments are validated before use.
+- CSV exports guard against formula injection.
+- Saving a custom preset with an existing slug no longer overwrites that preset.
+- The presets list now requires the edit capability.
+- View creation validates the referenced dataset.
+- Orphaned migration options are removed on uninstall and cron events are cleared on deactivate/uninstall.
+- Arrow-key navigation works in the data grid.
+
+### Code quality
+
+All PHP now passes the WordPress-Core coding standard.
