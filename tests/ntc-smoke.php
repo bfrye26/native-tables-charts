@@ -41,6 +41,12 @@ $schema = $call( 'schema_json', array( 'dataset_updated_at' => '2026-08-17 10:00
 $assert( false !== strpos( $schema, '"@type":"Dataset"' ) && false !== strpos( $schema, 'variableMeasured' ), 'schema emits Dataset + variables' );
 $assert( false === strpos( $schema, '</script><script' ), 'schema values escaped' );
 $assert( '' === $call( 'updated_date_html', array( 'showUpdatedDate' => false ), array( 'dataset_updated_at' => 'x' ) ), 'updated date off returns empty' );
+$xss_schema = $call( 'schema_json', array( 'dataset_updated_at' => '2026-08-17 10:00:00' ), array( 'enableSchema' => true, 'title' => 'Bench', 'valueColumns' => array( 1 ) ), array( array(), array( 'label' => '</script><script>alert(1)</script>', 'type' => 'number', 'unit' => 'fps' ) ) );
+$assert( false === strpos( $xss_schema, '<script>alert' ), 'schema_json escapes column label script tag' );
+$assert( false !== strpos( $xss_schema, '&lt;' ), 'schema_json emits escaped entities for label' );
+$updated = $call( 'updated_date_html', array( 'showUpdatedDate' => true ), array( 'dataset_updated_at' => '2026-08-17 10:00:00' ) );
+$assert( false !== strpos( $updated, 'Last updated:' ), 'updated date renders Last updated line' );
+$assert( false !== strpos( $updated, '2026-08-17 10:00:00' ), 'updated date includes raw datetime' );
 $assert( 'redbackground:url(x)' === $call( 'safe_css_value', 'red;background:url(x)' ), 'safe_css_value strips ; {}<>' );
 $assert( '' === $call( 'css_length', '100%;background:red' ), 'css_length rejects injection' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";

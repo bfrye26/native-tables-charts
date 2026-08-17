@@ -134,7 +134,7 @@ final class NTC_Renderer {
 		foreach ( $value_cols as $v ) {
 			$col = $columns[ $v ] ?? null;
 			if ( ! $col || in_array( (string) ( $col['type'] ?? 'auto' ), array( 'text', 'url', 'sparkline', 'delta' ), true ) ) { continue; }
-			$variables[] = array( '@type' => 'PropertyValue', 'name' => $col['label'] ?? '', 'unitText' => $col['unit'] ?? '' );
+			$variables[] = array( '@type' => 'PropertyValue', 'name' => esc_html( $col['label'] ?? '' ), 'unitText' => esc_html( $col['unit'] ?? '' ) );
 		}
 		$payload = array(
 			'@context' => 'https://schema.org',
@@ -408,7 +408,8 @@ final class NTC_Renderer {
 			default:$out.=$this->chart_horizontal($chart_rows,$columns,$config);break;
 		}
 		$out.='</div>';if(!empty($config['axisLabel'])){$out.='<div class="ntc-chart-axis-label">'.esc_html($config['axisLabel']).'</div>';}
-		if($config['footer']||$config['secondaryFooter']||$config['source']){$out.='<figcaption class="ntc-chart-footer">';if($config['footer'])$out.='<div>'.esc_html($config['footer']).'</div>';if($config['secondaryFooter'])$out.='<div>'.esc_html($config['secondaryFooter']).'</div>';if($config['source'])$out.='<div>'.esc_html($config['source']).'</div>';$out.=$this->updated_date_html( $config, $data );$out.='</figcaption>';}
+		$updated_line = $this->updated_date_html( $config, $data );
+		if ( $config['footer'] || $config['secondaryFooter'] || $config['source'] || '' !== $updated_line ) { $out.='<figcaption class="ntc-chart-footer">';if($config['footer'])$out.='<div>'.esc_html($config['footer']).'</div>';if($config['secondaryFooter'])$out.='<div>'.esc_html($config['secondaryFooter']).'</div>';if($config['source'])$out.='<div>'.esc_html($config['source']).'</div>';if ( '' !== $updated_line ) { $out .= $updated_line; }$out.='</figcaption>'; }
 		$data_mode=sanitize_key((string)($config['accessibleDataMode']??'screenreader'));
 		if(!in_array($data_mode,array('screenreader','collapsible','visible','disabled'),true)){$data_mode='screenreader';}
 		if('collapsible'===$data_mode){$out.='<details class="ntc-chart-data"><summary>'.esc_html__('View chart data','native-tables-charts').'</summary>'.$this->accessible_chart_table($chart_rows,$columns,$config).'</details>';}
