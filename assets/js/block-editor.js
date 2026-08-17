@@ -29,7 +29,7 @@ const chartTypes=[
  {label:__('Scatter','native-tables-charts'),value:'scatter'},
  {label:__('Donut','native-tables-charts'),value:'donut'}
 ];
-const colTypes=['auto','text','number','currency','percent','url','time','iso_date','us_long_date','short_date'].map(v=>({label:v.replace(/_/g,' '),value:v}));
+const colTypes=['auto','text','number','currency','percent','url','time','iso_date','us_long_date','short_date','sparkline','delta'].map(v=>({label:v.replace(/_/g,' '),value:v}));
 
 
 function CompactColorControl({label,value,onChange,placeholder}){
@@ -222,7 +222,7 @@ function VirtualGrid({columns,rows,onColumns,onRows,selected,onSelect,onDeleteRo
  const onPaste=(e,ri,ci)=>{const text=e.clipboardData&&e.clipboardData.getData('text/plain');if(!text||(!text.includes('\t')&&!text.includes('\n')))return;e.preventDefault();const parsed=parseDelimited(text,'\t',false);const next=rows.map(r=>r.slice());parsed.rows.forEach((r,rOff)=>{const target=ri+rOff;if(target>=10000)return;while(next.length<=target)next.push(Array(columns.length).fill(''));r.forEach((v,cOff)=>{const tc=ci+cOff;if(tc<columns.length)next[target][tc]=v;});});onRows(next,null);};
  const inSelection=(ri,ci)=>{if(!selected||selected.r<0)return false;const r1=Math.min(selected.r,selected.r2??selected.r),r2=Math.max(selected.r,selected.r2??selected.r),c1=Math.min(selected.c,selected.c2??selected.c),c2=Math.max(selected.c,selected.c2??selected.c);return ri>=r1&&ri<=r2&&ci>=c1&&ci<=c2;};
  const select=(e,r,c)=>onSelect({r,c,shift:!!(e&&e.shiftKey)});
- const keyNav=(e,ri,ci)=>{if(e.key==='Enter'){e.preventDefault();const nr=clamp(ri+(e.shiftKey?-1:1),0,rows.length-1);onSelect({r:nr,c:ci,shift:false});setTimeout(()=>{const el=scroller.current&&scroller.current.querySelector('[data-r="'+nr+'"][data-c="'+ci+'"]');if(el)el.focus();},0);}};
+ const keyNav=(e,ri,ci)=>{if(e.key==='Enter'){e.preventDefault();const nr=clamp(ri+(e.shiftKey?-1:1),0,rows.length-1);onSelect({r:nr,c:ci,shift:false});setTimeout(()=>{const el=scroller.current&&scroller.current.querySelector('[data-r="'+nr+'"][data-c="'+ci+'"]');if(el)el.focus();},0);}else if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const dr=e.key==='ArrowUp'?-1:e.key==='ArrowDown'?1:0;const dc=e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:0;const nr=clamp(ri+dr,0,Math.max(0,rows.length-1));const nc=clamp(ci+dc,0,Math.max(0,columns.length-1));onSelect({r:nr,c:nc,shift:!!e.shiftKey});setTimeout(()=>{const el=scroller.current&&scroller.current.querySelector('[data-r="'+nr+'"][data-c="'+nc+'"]');if(el)el.focus();},0);}};
  const hasFocusControls=!!onToggleFocus;
  return h('div',{className:'ntc-grid-wrap'+(hasFocusControls?' has-focus-controls':''),ref:scroller,onScroll:e=>setScrollTop(e.currentTarget.scrollTop)},
   h('div',{className:'ntc-grid-header'},h('div',{className:'ntc-grid-corner'+(hasFocusControls?' has-focus-controls':'')},hasFocusControls&&h('span',{className:'ntc-focus-column-head',title:__('Chart focus','native-tables-charts')},__('Focus','native-tables-charts')),h('span',{className:'ntc-row-number-head'},'#')),columns.map((c,ci)=>h('div',{className:'ntc-grid-colhead',key:ci},h('input',{value:c.label||'',title:__('Column name','native-tables-charts'),onFocus:e=>select(e,-1,ci),onClick:e=>select(e,-1,ci),onChange:e=>updateCol(ci,'label',e.target.value)}),columns.length>1&&h('button',{type:'button',title:__('Delete column','native-tables-charts'),onClick:()=>onDeleteCol(ci)},'×')))),
@@ -281,7 +281,7 @@ function AutoRules({config,setConfig,kind}){
  return h('div',{className:'ntc-rule-editor'},rules.map((r,i)=>h('div',{className:'ntc-rule-row',key:i},
    h(SelectControl,{label:__('Apply to','native-tables-charts'),value:r.type||'row',options:[{label:__('Rows','native-tables-charts'),value:'row'},{label:__('Columns','native-tables-charts'),value:'column'}],onChange:v=>update(i,'type',v)}),
    h(TextControl,{label:r.type==='column'?__('Column numbers','native-tables-charts'):__('Row numbers','native-tables-charts'),help:__('Use 1-based numbers separated by commas.','native-tables-charts'),value:toText(r.indexes),onChange:v=>update(i,'indexes',fromText(v))}),
-   kind==='align'?h(SelectControl,{label:__('Alignment','native-tables-charts'),value:r.align||'left',options:[{label:__('Left','native-tables-charts'),value:'left'},{label:__('Center','native-tables-charts'),value:'center'},{label:__('Right','native-tables-charts'),value:'right'},{label:__('Justify','native-tables-charts'),value:'justify'}],onChange:v=>update(i,'align',v)}):h(wp.element.Fragment,null,h(TextControl,{label:__('Background','native-tables-charts'),value:r.background||'',placeholder:'#ffffff',onChange:v=>update(i,'background',v)}),h(TextControl,{label:__('Text colour','native-tables-charts'),value:r.color||'',placeholder:'#111111',onChange:v=>update(i,'color',v)})),
+   kind==='align'?h(SelectControl,{label:__('Alignment','native-tables-charts'),value:r.align||'left',options:[{label:__('Left','native-tables-charts'),value:'left'},{label:__('Center','native-tables-charts'),value:'center'},{label:__('Right','native-tables-charts'),value:'right'},{label:__('Justify','native-tables-charts'),value:'justify'}],onChange:v=>update(i,'align',v)}):h(wp.element.Fragment,null,r.type==='column'&&h(CheckboxControl,{label:__('Heatmap scale (low to high)','native-tables-charts'),checked:!!r.heatmap,help:__('Colour numeric cells by value; background and text colours become the low/high ends.','native-tables-charts'),onChange:v=>update(i,'heatmap',v)}),h(TextControl,{label:__('Background','native-tables-charts'),value:r.background||'',placeholder:'#ffffff',onChange:v=>update(i,'background',v)}),h(TextControl,{label:__('Text colour','native-tables-charts'),value:r.color||'',placeholder:'#111111',onChange:v=>update(i,'color',v)})),
    h(Button,{variant:'tertiary',isDestructive:true,onClick:()=>save(rules.filter((_,x)=>x!==i))},__('Remove rule','native-tables-charts'))
  )),h(Button,{variant:'secondary',onClick:()=>save(rules.concat([kind==='align'?{type:'row',indexes:[],align:'left'}:{type:'row',indexes:[],background:'',color:''}]))},kind==='align'?__('Add alignment rule','native-tables-charts'):__('Add colour rule','native-tables-charts')));
 }
@@ -344,6 +344,12 @@ function TableInspector({attributes,setAttributes,selected,customPresets}){
     h('h4',null,__('Colour rules','native-tables-charts')),h(AutoRules,{config,setConfig,kind:'color'}),
     h('h4',null,__('Alignment rules','native-tables-charts')),h(AutoRules,{config,setConfig,kind:'align'})
   ),
+  h(PanelBody,{title:__('Frontend Controls','native-tables-charts'),initialOpen:false},
+    h(ToggleControl,{label:__('Show table search','native-tables-charts'),checked:!!config.enableSearch,onChange:v=>setConfig(Object.assign({},config,{enableSearch:v}))}),
+    h(ToggleControl,{label:__('Paginate table rows','native-tables-charts'),checked:!!config.enablePagination,onChange:v=>setConfig(Object.assign({},config,{enablePagination:v}))}),
+    config.enablePagination&&h(RangeControl,{label:__('Rows per page','native-tables-charts'),value:Number(config.rowsPerPage||10),min:1,max:100,onChange:v=>setConfig(Object.assign({},config,{rowsPerPage:v}))}),
+    h(ToggleControl,{label:__('CSV download button','native-tables-charts'),checked:!!config.enableExport,onChange:v=>setConfig(Object.assign({},config,{enableExport:v}))})
+  ),
   h(PanelBody,{title:__('Colours, Typography & Spacing','native-tables-charts'),initialOpen:false},
     h(TextControl,{label:__('Header background','native-tables-charts'),value:config.headerBackground||'',onChange:v=>setConfig(Object.assign({},config,{headerBackground:v}))}),
     h(TextControl,{label:__('Header text','native-tables-charts'),value:config.headerColor||'',onChange:v=>setConfig(Object.assign({},config,{headerColor:v}))}),
@@ -383,7 +389,9 @@ function TableInspector({attributes,setAttributes,selected,customPresets}){
     h(ToggleControl,{label:__('Enable per-cell properties','native-tables-charts'),checked:config.enableCellProperties!==false,onChange:v=>setConfig(Object.assign({},config,{enableCellProperties:v}))}),
     h(RangeControl,{label:__('Average formula decimals','native-tables-charts'),value:Number(config.averageDecimals||2),min:0,max:8,onChange:v=>setConfig(Object.assign({},config,{averageDecimals:v}))}),
     h(SelectControl,{label:__('Average formula rounding','native-tables-charts'),value:config.averageRound||'half_up',options:[{label:'PHP_ROUND_HALF_UP',value:'half_up'},{label:'PHP_ROUND_HALF_DOWN',value:'half_down'},{label:'PHP_ROUND_HALF_EVEN',value:'half_even'},{label:'PHP_ROUND_HALF_ODD',value:'half_odd'}],onChange:v=>setConfig(Object.assign({},config,{averageRound:v}))}),
-    h(TextControl,{label:__('Custom class','native-tables-charts'),value:config.customClass||'',onChange:v=>setConfig(Object.assign({},config,{customClass:v}))})
+    h(TextControl,{label:__('Custom class','native-tables-charts'),value:config.customClass||'',onChange:v=>setConfig(Object.assign({},config,{customClass:v}))}),
+    h(ToggleControl,{label:__('Schema.org metadata','native-tables-charts'),checked:!!config.enableSchema,onChange:v=>setConfig(Object.assign({},config,{enableSchema:v}))}),
+    h(ToggleControl,{label:__('Show last-updated date','native-tables-charts'),checked:!!config.showUpdatedDate,onChange:v=>setConfig(Object.assign({},config,{showUpdatedDate:v}))})
   )
  );
 }
@@ -457,7 +465,17 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
     h(CompactColorControl,{label:__('Highlight','native-tables-charts'),value:config.highlightColor||'',placeholder:'#9e2f5f',onChange:v=>patch({highlightColor:v})}),
     h(CompactColorControl,{label:__('Text colour','native-tables-charts'),value:config.textColor||'',placeholder:'#f5f7fa',onChange:v=>patch({textColor:v})}),
     h(CompactColorControl,{label:__('Muted text','native-tables-charts'),value:config.mutedColor||'',placeholder:'#9ba8b8',onChange:v=>patch({mutedColor:v})}),
-    h(CompactColorControl,{label:__('Grid colour','native-tables-charts'),value:config.gridColor||'',placeholder:'#263445',onChange:v=>patch({gridColor:v})})
+    h(CompactColorControl,{label:__('Grid colour','native-tables-charts'),value:config.gridColor||'',placeholder:'#263445',onChange:v=>patch({gridColor:v})}),
+    h(SelectControl,{label:__('Dark mode','native-tables-charts'),value:config.themeMode||'fixed',options:[{label:__('Fixed theme','native-tables-charts'),value:'fixed'},{label:__('Auto (follows system)','native-tables-charts'),value:'auto'}],onChange:v=>patch({themeMode:v})}),
+    config.themeMode==='auto'&&h(wp.element.Fragment,null,
+      h(CompactColorControl,{label:__('Dark background','native-tables-charts'),value:config.darkBackground||'',placeholder:'#0f131a',onChange:v=>patch({darkBackground:v})}),
+      h(CompactColorControl,{label:__('Dark text','native-tables-charts'),value:config.darkTextColor||'',placeholder:'#e6e9ee',onChange:v=>patch({darkTextColor:v})}),
+      h(CompactColorControl,{label:__('Dark muted text','native-tables-charts'),value:config.darkMutedColor||'',placeholder:'#9aa5b1',onChange:v=>patch({darkMutedColor:v})}),
+      h(CompactColorControl,{label:__('Dark grid','native-tables-charts'),value:config.darkGridColor||'',placeholder:'#2a3442',onChange:v=>patch({darkGridColor:v})})
+    ),
+    h(ToggleControl,{label:__('Download buttons','native-tables-charts'),checked:!!config.enableExport,onChange:v=>patch({enableExport:v})}),
+    h(ToggleControl,{label:__('Schema.org metadata','native-tables-charts'),checked:!!config.enableSchema,onChange:v=>patch({enableSchema:v})}),
+    h(ToggleControl,{label:__('Show last-updated date','native-tables-charts'),checked:!!config.showUpdatedDate,onChange:v=>patch({showUpdatedDate:v})})
   )
  );
 }
