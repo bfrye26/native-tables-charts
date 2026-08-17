@@ -136,7 +136,9 @@ $GLOBALS['wpdb'] = new class() {
 	public $prefix      = 'wp_';
 	public $insert_id   = 42;
 	public $last_insert = array();
+	public $queries     = array();
 	public function get_var( $q ) {
+		$this->queries[] = $q;
 		if ( $GLOBALS['fake_slug_taken'] ) {
 			$GLOBALS['fake_slug_taken'] = false;
 			return 7;
@@ -144,6 +146,7 @@ $GLOBALS['wpdb'] = new class() {
 	public function get_row( $q, $o = 'OBJECT' ) {
 		return null; }
 	public function get_results( $q, $o = 'OBJECT' ) {
+		$this->queries[] = $q;
 		return array(); }
 	public function get_col( $q ) {
 		return array(); }
@@ -156,6 +159,7 @@ $GLOBALS['wpdb'] = new class() {
 	public function delete( $t, $w, $f = array() ) {
 		return 1; }
 	public function query( $q ) {
+		$this->queries[] = $q;
 		return 1; }
 	public function prepare( $q, ...$a ) {
 		return $q; }

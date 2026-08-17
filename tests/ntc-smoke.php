@@ -217,5 +217,14 @@ $dup_table = $ntc->shortcode_dataset(
 	)
 );
 $assert( false !== strpos( $dup_table, 'ntc-table-wrap' ), 'shortcode table type still renders table markup' );
+$GLOBALS['wpdb']->queries = array();
+$repo->upsert_rows( 1, array_fill( 0, 1001, array( 'x' ) ) );
+$assert( 3 === count( $GLOBALS['wpdb']->queries ), 'upsert_rows batches 1001 rows into 3 statements' );
+$assert( 500 === substr_count( $GLOBALS['wpdb']->queries[0], '(%d,%d,%s,%s)' ), 'first statement holds 500 rows' );
+$assert( 1 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 'last statement holds 1 row' );
+$GLOBALS['wpdb']->queries = array();
+$repo->patch_rows( 1, array_fill( 0, 1200, array( 'y' ) ) );
+$assert( 3 === count( $GLOBALS['wpdb']->queries ), 'patch_rows batches 1200 rows into 3 statements' );
+$assert( 200 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 'patch last statement holds 200 rows' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

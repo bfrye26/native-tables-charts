@@ -148,20 +148,21 @@ final class NTC_Repository {
 		$now         = current_time( 'mysql', true );
 		$start_index = max( 0, min( 9999, $start_index ) );
 		$rows        = array_slice( array_values( $rows ), 0, max( 0, 10000 - $start_index ) );
-		foreach ( $rows as $i => $row ) {
-			$index = $start_index + $i;
-			$json  = wp_json_encode( $this->sanitize_row( is_array( $row ) ? $row : array( $row ) ) );
-			$sql   = $wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL -- table names are internal identifiers, cannot be prepared.
-				"INSERT INTO {$table} (dataset_id,row_index,row_json,updated_at) VALUES (%d,%d,%s,%s) ON DUPLICATE KEY UPDATE row_json=VALUES(row_json),updated_at=VALUES(updated_at)",
-				$dataset_id,
-				$index,
-				$json,
-				$now
-			);
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql is prepared above with a table identifier interpolated.
-			if ( false === $wpdb->query( $sql ) ) {
-				return false; } // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$offset      = 0;
+		foreach ( array_chunk( $rows, 500 ) as $chunk ) {
+			$placeholders = array();
+			$values       = array();
+			foreach ( $chunk as $i => $row ) {
+				$placeholders[] = '(%d,%d,%s,%s)';
+				$values[]       = $dataset_id;
+				$values[]       = $start_index + $offset + $i;
+				$values[]       = wp_json_encode( $this->sanitize_row( is_array( $row ) ? $row : array( $row ) ) );
+				$values[]       = $now;
+			}
+			$sql = "INSERT INTO {$table} (dataset_id,row_index,row_json,updated_at) VALUES " . implode( ',', $placeholders ) . ' ON DUPLICATE KEY UPDATE row_json=VALUES(row_json),updated_at=VALUES(updated_at)';
+			if ( false === $wpdb->query( $wpdb->prepare( $sql, $values ) ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				return false; }
+			$offset += count( $chunk );
 		}
 		$this->touch_dataset( $dataset_id );
 		return true;
@@ -171,22 +172,26 @@ final class NTC_Repository {
 		global $wpdb;
 		$table = $wpdb->prefix . 'ntc_rows';
 		$now   = current_time( 'mysql', true );
+		$rows  = array();
 		foreach ( $indexed_rows as $index => $row ) {
 			$idx = absint( $index );
 			if ( $idx >= 10000 ) {
 				continue; }
-			$json = wp_json_encode( $this->sanitize_row( is_array( $row ) ? $row : array( $row ) ) );
-			$sql  = $wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL -- table names are internal identifiers, cannot be prepared.
-				"INSERT INTO {$table} (dataset_id,row_index,row_json,updated_at) VALUES (%d,%d,%s,%s) ON DUPLICATE KEY UPDATE row_json=VALUES(row_json),updated_at=VALUES(updated_at)",
-				$dataset_id,
-				$idx,
-				$json,
-				$now
-			);
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql is prepared above with a table identifier interpolated.
-			if ( false === $wpdb->query( $sql ) ) {
-				return false; } // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$rows[] = array( $idx, $row );
+		}
+		foreach ( array_chunk( $rows, 500 ) as $chunk ) {
+			$placeholders = array();
+			$values       = array();
+			foreach ( $chunk as $item ) {
+				$placeholders[] = '(%d,%d,%s,%s)';
+				$values[]       = $dataset_id;
+				$values[]       = $item[0];
+				$values[]       = wp_json_encode( $this->sanitize_row( is_array( $item[1] ) ? $item[1] : array( $item[1] ) ) );
+				$values[]       = $now;
+			}
+			$sql = "INSERT INTO {$table} (dataset_id,row_index,row_json,updated_at) VALUES " . implode( ',', $placeholders ) . ' ON DUPLICATE KEY UPDATE row_json=VALUES(row_json),updated_at=VALUES(updated_at)';
+			if ( false === $wpdb->query( $wpdb->prepare( $sql, $values ) ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				return false; }
 		}
 		$this->touch_dataset( $dataset_id );
 		return true;
