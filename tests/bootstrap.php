@@ -50,7 +50,7 @@ $GLOBALS['wpdb'] = new class {
 	public $prefix = 'wp_';
 	public $insert_id = 42;
 	public $last_insert = array();
-	public function get_var( $q ) { return $GLOBALS['fake_slug_taken'] ? 7 : null; }
+	public function get_var( $q ) { if ( $GLOBALS['fake_slug_taken'] ) { $GLOBALS['fake_slug_taken'] = false; return 7; } return null; }
 	public function get_row( $q, $o = 'OBJECT' ) { return null; }
 	public function get_results( $q, $o = 'OBJECT' ) { return array(); }
 	public function get_col( $q ) { return array(); }

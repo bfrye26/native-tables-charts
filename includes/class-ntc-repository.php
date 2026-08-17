@@ -199,13 +199,26 @@ final class NTC_Repository {
 
 	public function create_preset( string $type, string $name, array $settings ): int {
 		global $wpdb;
-		$slug = sanitize_title( $name ); $now=current_time('mysql',true);
-		$wpdb->replace( $wpdb->prefix.'ntc_presets', array(
-			'name'=>sanitize_text_field($name), 'slug'=>$slug, 'type'=>sanitize_key($type),
-			'settings_json'=>wp_json_encode($this->sanitize_config($settings)), 'author_id'=>get_current_user_id(),
-			'created_at'=>$now, 'updated_at'=>$now,
-		), array('%s','%s','%s','%s','%d','%s','%s') );
-		return (int)$wpdb->insert_id;
+		$table = $wpdb->prefix . 'ntc_presets';
+		$type = sanitize_key( $type );
+		$base = sanitize_title( $name );
+		$slug = $base;
+		$i = 2;
+		while ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE slug=%s AND type=%s", $slug, $type ) ) ) {
+			$slug = $base . '-' . $i;
+			$i++;
+		}
+		$now = current_time( 'mysql', true );
+		$wpdb->insert( $table, array(
+			'name' => sanitize_text_field( $name ),
+			'slug' => $slug,
+			'type' => $type,
+			'settings_json' => wp_json_encode( $this->sanitize_config( $settings ) ),
+			'author_id' => get_current_user_id(),
+			'created_at' => $now,
+			'updated_at' => $now,
+		), array( '%s', '%s', '%s', '%s', '%d', '%s', '%s' ) );
+		return (int) $wpdb->insert_id;
 	}
 
 	public function delete_preset( int $id ): bool {

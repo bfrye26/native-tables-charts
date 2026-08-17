@@ -8,5 +8,12 @@ $assert = function ( $cond, $label ) use ( &$fails ) { if ( $cond ) { echo "ok  
 $assert( "'=SUM(A1)" === NTC_REST::guard_csv_cell( '=SUM(A1)' ), 'guard prefixes =' );
 $assert( 'hello' === NTC_REST::guard_csv_cell( 'hello' ), 'guard passthrough' );
 $assert( '-12.5' === NTC_REST::guard_csv_cell( '-12.5' ), 'guard keeps plain negative numbers' );
+$GLOBALS['fake_slug_taken'] = true;
+$repo = new NTC_Repository();
+$repo->create_preset( 'table', 'My Style', array() );
+$assert( 'my-style-2' === $GLOBALS['wpdb']->last_insert['slug'], 'slug collision suffixes -2' );
+$GLOBALS['fake_slug_taken'] = false;
+$repo->create_preset( 'table', 'My Style', array() );
+$assert( 'my-style' === $GLOBALS['wpdb']->last_insert['slug'], 'free slug used as-is' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );
