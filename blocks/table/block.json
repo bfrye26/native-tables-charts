@@ -1,0 +1,83 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "ntc/table",
+  "version": "1.0.8",
+  "title": "Native Data Table",
+  "category": "ntc-data",
+  "icon": "editor-table",
+  "description": "Create responsive, sortable data tables directly in Gutenberg.",
+  "keywords": [
+    "table",
+    "league",
+    "data",
+    "comparison",
+    "benchmark"
+  ],
+  "textdomain": "native-tables-charts",
+  "attributes": {
+    "widthMode": {
+      "type": "string"
+    },
+    "align": {
+      "type": "string",
+      "default": ""
+    },
+    "mode": {
+      "type": "string",
+      "default": "inline"
+    },
+    "datasetId": {
+      "type": "number",
+      "default": 0
+    },
+    "viewId": {
+      "type": "number",
+      "default": 0
+    },
+    "columns": {
+      "type": "array",
+      "default": [
+        {
+          "id": "c1",
+          "label": "Item",
+          "type": "text",
+          "unit": ""
+        },
+        {
+          "id": "c2",
+          "label": "Value",
+          "type": "number",
+          "unit": ""
+        }
+      ]
+    },
+    "rows": {
+      "type": "array",
+      "default": [
+        [
+          "Example",
+          "100"
+        ]
+      ]
+    },
+    "config": {
+      "type": "object",
+      "default": {}
+    },
+    "cellMeta": {
+      "type": "object",
+      "default": {}
+    }
+  },
+  "supports": {
+    "anchor": true,
+    "html": false,
+    "spacing": {
+      "margin": true
+    }
+  },
+  "editorScript": "ntc-block-editor",
+  "editorStyle": "ntc-block-editor-style",
+  "style": "ntc-frontend-style"
+}

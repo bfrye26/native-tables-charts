@@ -1,0 +1,105 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "ntc/chart",
+  "version": "1.0.8",
+  "title": "Native Data Chart",
+  "category": "ntc-data",
+  "icon": "chart-bar",
+  "description": "Build responsive charts in Gutenberg without an external chart service.",
+  "keywords": [
+    "chart",
+    "graph",
+    "benchmark",
+    "data",
+    "visualization"
+  ],
+  "textdomain": "native-tables-charts",
+  "attributes": {
+    "widthMode": {
+      "type": "string"
+    },
+    "align": {
+      "type": "string",
+      "default": ""
+    },
+    "mode": {
+      "type": "string",
+      "default": "inline"
+    },
+    "datasetId": {
+      "type": "number",
+      "default": 0
+    },
+    "viewId": {
+      "type": "number",
+      "default": 0
+    },
+    "columns": {
+      "type": "array",
+      "default": [
+        {
+          "id": "c1",
+          "label": "Product",
+          "type": "text",
+          "unit": ""
+        },
+        {
+          "id": "c2",
+          "label": "Score",
+          "type": "number",
+          "unit": ""
+        }
+      ]
+    },
+    "rows": {
+      "type": "array",
+      "default": [
+        [
+          "Product A",
+          "100"
+        ],
+        [
+          "Product B",
+          "85"
+        ],
+        [
+          "Product C",
+          "72"
+        ]
+      ]
+    },
+    "config": {
+      "type": "object",
+      "default": {
+        "chartType": "horizontal-bar",
+        "title": "Benchmark",
+        "subtitle": "",
+        "labelColumn": 0,
+        "valueColumns": [
+          1
+        ],
+        "sortColumn": 1,
+        "sortDirection": "desc",
+        "preset": "benchmark-dark",
+        "typographyPreset": "comfortable",
+        "density": "auto",
+        "accessibleDataMode": "screenreader"
+      }
+    },
+    "cellMeta": {
+      "type": "object",
+      "default": {}
+    }
+  },
+  "supports": {
+    "anchor": true,
+    "html": false,
+    "spacing": {
+      "margin": true
+    }
+  },
+  "editorScript": "ntc-block-editor",
+  "editorStyle": "ntc-block-editor-style",
+  "style": "ntc-frontend-style"
+}
