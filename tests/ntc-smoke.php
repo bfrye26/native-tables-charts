@@ -226,5 +226,34 @@ $GLOBALS['wpdb']->queries = array();
 $repo->patch_rows( 1, array_fill( 0, 1200, array( 'y' ) ) );
 $assert( 3 === count( $GLOBALS['wpdb']->queries ), 'patch_rows batches 1200 rows into 3 statements' );
 $assert( 200 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 'patch last statement holds 200 rows' );
+require_once dirname( __DIR__ ) . '/includes/class-ntc-migrator.php';
+$migrator                   = new NTC_Migrator( $repo );
+$call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
+	$mm = ( new ReflectionClass( 'NTC_Migrator' ) )->getMethod( $m );
+	$mm->setAccessible( true );
+	return $mm->invokeArgs( $migrator, $a );
+};
+$GLOBALS['wpdb']->queries   = array();
+$GLOBALS['fake_post_count'] = 550;
+$GLOBALS['fake_posts']      = array();
+for ( $i = 0; $i < 200; $i++ ) {
+	$GLOBALS['fake_posts'][] = array(
+		'ID'           => $i + 1,
+		'post_content' => '[lt id="1"] x',
+	);
+}
+$r = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 0, 200 );
+$assert( 200 === $r['processed'] && 550 === $r['total'], 'convert_posts processes a 200-post page and reports total' );
+$assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'LIMIT 200 OFFSET 0' ), 'convert_posts pages with LIMIT/OFFSET' );
+$GLOBALS['fake_backup_count'] = 450;
+$GLOBALS['fake_backups']      = array();
+for ( $i = 0; $i < 200; $i++ ) {
+	$GLOBALS['fake_backups'][] = array(
+		'post_id'          => $i + 1,
+		'original_content' => 'old',
+	);
+}
+$rb = $call_m( 'rollback', 'batch-1', 0, 200 );
+$assert( 450 === $rb['total'] && 250 === $rb['remaining'] && 200 === $rb['processed'], 'rollback pages backups and reports remaining' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

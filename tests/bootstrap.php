@@ -132,8 +132,28 @@ function plugin_dir_path( $file ) {
 	return rtrim( dirname( $file ), '/\\' ) . '/'; }
 function plugin_dir_url( $file ) {
 	return ''; }
+function wp_generate_password( $length = 12, $special_chars = true, $extra_special_chars = false ) {
+	return 'abc123'; }
+function update_option( $option, $value, $autoload = null ) {
+	$GLOBALS['last_option'] = array( $option, $value );
+	return true; }
+function sanitize_textarea_field( $str ) {
+	return (string) $str; }
+function wp_update_post( $postarr = array(), $wp_error = false ) {
+	return 1; }
+function delete_transient( $transient ) {
+	unset( $GLOBALS['fake_transients'][ $transient ] );
+	return true; }
+function set_transient( $transient, $value, $expiration = 0 ) {
+	$GLOBALS['fake_transients'][ $transient ] = $value;
+	return true; }
+function get_transient( $transient ) {
+	return $GLOBALS['fake_transients'][ $transient ] ?? false; }
+function wp_unslash( $value ) {
+	return $value; }
 $GLOBALS['wpdb'] = new class() {
 	public $prefix      = 'wp_';
+	public $posts       = 'wp_posts';
 	public $insert_id   = 42;
 	public $last_insert = array();
 	public $queries     = array();
@@ -142,11 +162,24 @@ $GLOBALS['wpdb'] = new class() {
 		if ( $GLOBALS['fake_slug_taken'] ) {
 			$GLOBALS['fake_slug_taken'] = false;
 			return 7;
-		} return null; }
+		}
+		if ( false !== strpos( $q, 'ntc_backups' ) && isset( $GLOBALS['fake_backup_count'] ) ) {
+			return $GLOBALS['fake_backup_count'];
+		}
+		if ( false !== strpos( $q, 'wp_posts' ) && isset( $GLOBALS['fake_post_count'] ) ) {
+			return $GLOBALS['fake_post_count'];
+		}
+		return null; }
 	public function get_row( $q, $o = 'OBJECT' ) {
 		return null; }
 	public function get_results( $q, $o = 'OBJECT' ) {
 		$this->queries[] = $q;
+		if ( false !== strpos( $q, 'wp_posts' ) && isset( $GLOBALS['fake_posts'] ) ) {
+			return $GLOBALS['fake_posts'];
+		}
+		if ( false !== strpos( $q, 'ntc_backups' ) && isset( $GLOBALS['fake_backups'] ) ) {
+			return $GLOBALS['fake_backups'];
+		}
 		return array(); }
 	public function get_col( $q ) {
 		return array(); }
@@ -162,6 +195,11 @@ $GLOBALS['wpdb'] = new class() {
 		$this->queries[] = $q;
 		return 1; }
 	public function prepare( $q, ...$a ) {
+		if ( $a && ! ( 1 === count( $a ) && is_array( $a[0] ) ) ) {
+			foreach ( $a as $v ) {
+				$q = preg_replace( '/%d/', (string) (int) $v, $q, 1 );
+			}
+		}
 		return $q; }
 };
 require dirname( __DIR__ ) . '/includes/class-ntc-repository.php';

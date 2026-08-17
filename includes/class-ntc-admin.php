@@ -105,9 +105,39 @@ final class NTC_Admin {
 			set_transient( 'ntc_migration_report_' . get_current_user_id(), $this->migrator->dry_run(), 10 * MINUTE_IN_SECONDS );
 			$this->redirect( 'ntc-migration', 'dryrun=1' );}
 		if ( 'migration_run' === $action && current_user_can( 'ntc_migrate' ) ) {
-			$result = $this->migrator->migrate( ! empty( $_POST['convert_content'] ) );
-			set_transient( 'ntc_migration_result_' . get_current_user_id(), $result, 30 * MINUTE_IN_SECONDS );
-			$this->redirect( 'ntc-migration', 'migrated=1' );}
+			$convert  = ! empty( $_POST['convert_content'] );
+			$batch_id = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? '' ) );
+			$offset   = absint( $_POST['offset'] ?? 0 );
+			$chunk    = 200;
+			if ( '' !== $batch_id ) {
+				$result = $this->migrator->continue_migration( $batch_id, $offset, $chunk );
+			} else {
+				$result = $this->migrator->migrate( $convert, 0, $chunk );
+			}
+			$batch_id   = (string) ( $result['batch_id'] ?? $batch_id );
+			$total      = (int) ( $result['posts_total'] ?? 0 );
+			$new_offset = $offset + (int) ( $result['processed'] ?? 0 );
+			$done       = ! $convert || empty( $batch_id ) || ( 0 === (int) ( $result['posts_remaining'] ?? 0 ) );
+			$uid        = get_current_user_id();
+			if ( $done ) {
+				delete_transient( 'ntc_migration_progress_' . $uid );
+				set_transient( 'ntc_migration_result_' . $uid, $result, 30 * MINUTE_IN_SECONDS );
+				$this->redirect( 'ntc-migration', 'migrated=1' );
+			}
+			set_transient(
+				'ntc_migration_progress_' . $uid,
+				array(
+					'done'     => false,
+					'convert'  => $convert,
+					'batch_id' => $batch_id,
+					'offset'   => $new_offset,
+					'total'    => $total,
+					'result'   => $result,
+				),
+				HOUR_IN_SECONDS
+			);
+			$this->redirect( 'ntc-migration', 'migrated=1' );
+		}
 		if ( 'migration_xml_import' === $action && ( current_user_can( 'ntc_migrate' ) || current_user_can( 'ntc_import' ) ) ) {
 			$result = array(
 				'success' => false,
@@ -126,10 +156,30 @@ final class NTC_Admin {
 			}set_transient( 'ntc_migration_result_' . get_current_user_id(), $result, 30 * MINUTE_IN_SECONDS );
 			$this->redirect( 'ntc-migration', 'xmlimport=1' );}
 		if ( 'migration_rollback' === $action && current_user_can( 'ntc_migrate' ) ) {
-			$batch  = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? '' ) );
-			$result = $this->migrator->rollback( $batch );
-			set_transient( 'ntc_migration_result_' . get_current_user_id(), $result, 30 * MINUTE_IN_SECONDS );
-			$this->redirect( 'ntc-migration', 'rolledback=1' );}
+			$batch      = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? '' ) );
+			$offset     = absint( $_POST['offset'] ?? 0 );
+			$result     = $this->migrator->rollback( $batch, $offset, 200 );
+			$uid        = get_current_user_id();
+			$new_offset = $offset + (int) ( $result['processed'] ?? 0 );
+			$done       = 0 === (int) ( $result['remaining'] ?? 0 );
+			if ( $done ) {
+				delete_transient( 'ntc_rollback_progress_' . $uid );
+				set_transient( 'ntc_migration_result_' . $uid, $result, 30 * MINUTE_IN_SECONDS );
+				$this->redirect( 'ntc-migration', 'rolledback=1' );
+			}
+			set_transient(
+				'ntc_rollback_progress_' . $uid,
+				array(
+					'done'     => false,
+					'batch_id' => $batch,
+					'offset'   => $new_offset,
+					'total'    => (int) ( $result['total'] ?? 0 ),
+					'result'   => $result,
+				),
+				HOUR_IN_SECONDS
+			);
+			$this->redirect( 'ntc-migration', 'rolledback=1' );
+		}
 		if ( 'save_settings' === $action && current_user_can( 'ntc_manage_settings' ) ) {
 			update_option( 'ntc_delete_data_on_uninstall', ! empty( $_POST['delete_data'] ) ? 1 : 0 );
 			$features = array();
@@ -445,9 +495,11 @@ endif;
 	}
 
 	public function migration_page(): void {
-		$detect = $this->migrator->detect();
-		$report = get_transient( 'ntc_migration_report_' . get_current_user_id() );
-		$result = get_transient( 'ntc_migration_result_' . get_current_user_id() );
+		$detect             = $this->migrator->detect();
+		$report             = get_transient( 'ntc_migration_report_' . get_current_user_id() );
+		$result             = get_transient( 'ntc_migration_result_' . get_current_user_id() );
+		$migration_progress = get_transient( 'ntc_migration_progress_' . get_current_user_id() );
+		$rollback_progress  = get_transient( 'ntc_rollback_progress_' . get_current_user_id() );
 		?>
 		<div class="wrap ntc-admin"><h1><?php esc_html_e( 'League Table Migration', 'native-tables-charts' ); ?></h1><div class="ntc-callout <?php echo $detect['available'] ? 'is-good' : 'is-neutral'; ?>"><strong><?php echo $detect['available'] ? esc_html__( 'League Table data detected.', 'native-tables-charts' ) : esc_html__( 'No League Table data detected.', 'native-tables-charts' ); ?></strong>
 		<?php
@@ -458,7 +510,7 @@ endif;
 		<?php
 		if ( $detect['available'] ) :
 			?>
-			<div class="ntc-cards"><section><h2><?php esc_html_e( '1. Dry Run', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'Analyze the existing League Table database before changing anything.', 'native-tables-charts' ); ?></p><form method="post"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_dry_run"><button class="button button-secondary"><?php esc_html_e( 'Run Dry-Run Report', 'native-tables-charts' ); ?></button></form></section><section><h2><?php esc_html_e( '2. Migrate', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'Create reusable Native Tables datasets and views. Existing League Table database tables are never deleted.', 'native-tables-charts' ); ?></p><form method="post" onsubmit="return confirm('<?php echo esc_js( __( 'Start the migration now? A backup of every changed post will be kept for rollback.', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_run"><label><input type="checkbox" name="convert_content" value="1" checked> <?php esc_html_e( 'Replace [lt] shortcodes and dalt/table blocks in post content', 'native-tables-charts' ); ?></label><p><button class="button button-primary"><?php esc_html_e( 'Run Migration', 'native-tables-charts' ); ?></button></p></form></section></div><?php endif; ?>
+			<div class="ntc-cards"><section><h2><?php esc_html_e( '1. Dry Run', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'Analyze the existing League Table database before changing anything.', 'native-tables-charts' ); ?></p><form method="post"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_dry_run"><button class="button button-secondary"><?php esc_html_e( 'Run Dry-Run Report', 'native-tables-charts' ); ?></button></form></section><section><h2><?php esc_html_e( '2. Migrate', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'Create reusable Native Tables datasets and views. Existing League Table database tables are never deleted.', 'native-tables-charts' ); ?></p><form method="post" id="ntc-migrate-form" onsubmit="return this.elements.offset.value!=0||confirm('<?php echo esc_js( __( 'Start the migration now? A backup of every changed post will be kept for rollback.', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_run"><label><input type="checkbox" name="convert_content" value="1" checked> <?php esc_html_e( 'Replace [lt] shortcodes and dalt/table blocks in post content', 'native-tables-charts' ); ?></label><input type="hidden" name="batch_id" value="<?php echo esc_attr( $migration_progress['batch_id'] ?? '' ); ?>"><input type="hidden" name="offset" value="<?php echo esc_attr( $migration_progress['offset'] ?? '0' ); ?>"><p><button class="button button-primary"><?php esc_html_e( 'Run Migration', 'native-tables-charts' ); ?></button></p></form></section></div><?php endif; ?>
 		<div class="ntc-cards"><section><h2><?php esc_html_e( 'Import League Table XML', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'If you exported tables from League Table on another site, import its XML backup directly into Native Tables & Charts. This creates reusable datasets and synced table views without requiring the old plugin to be active.', 'native-tables-charts' ); ?></p><form method="post" enctype="multipart/form-data"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_xml_import"><input type="file" name="league_xml" accept=".xml,text/xml,application/xml" required><p><button class="button"><?php esc_html_e( 'Import XML', 'native-tables-charts' ); ?></button></p></form></section></div>
 		<?php
 		if ( is_array( $report ) ) :
@@ -484,7 +536,18 @@ endif;
 			<?php
 			if ( ! empty( $result['batch_id'] ) ) :
 				?>
-			<form method="post" onsubmit="return confirm('<?php echo esc_js( __( 'Restore the original post content from this migration batch?', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_rollback"><input type="hidden" name="batch_id" value="<?php echo esc_attr( $result['batch_id'] ); ?>"><button class="button"><?php esc_html_e( 'Rollback This Batch', 'native-tables-charts' ); ?></button></form><?php endif; ?><?php endif; ?></div>
+			<form method="post" id="ntc-rollback-form" onsubmit="return this.elements.offset.value!=0||confirm('<?php echo esc_js( __( 'Restore the original post content from this migration batch?', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_rollback"><input type="hidden" name="batch_id" value="<?php echo esc_attr( $result['batch_id'] ); ?>"><input type="hidden" name="offset" value="<?php echo esc_attr( $rollback_progress['offset'] ?? '0' ); ?>"><button class="button"><?php esc_html_e( 'Rollback This Batch', 'native-tables-charts' ); ?></button></form><?php endif; ?><?php endif; ?>
+		<?php if ( is_array( $migration_progress ) && empty( $migration_progress['done'] ) ) : ?>
+			<?php /* translators: 1: number of posts processed so far, 2: total posts to process. */ ?>
+		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d posts processed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['offset'], (int) $migration_progress['total'] ); ?></p></div>
+		<script>(function(){setTimeout(function(){var f=document.getElementById('ntc-migrate-form');if(f){(f.requestSubmit||f.submit).call(f);}},600);})();</script>
+		<?php endif; ?>
+		<?php if ( is_array( $rollback_progress ) && empty( $rollback_progress['done'] ) ) : ?>
+			<?php /* translators: 1: number of posts restored so far, 2: total posts to restore. */ ?>
+		<div class="notice notice-info"><p><?php printf( esc_html__( 'Rollback in progress — %1$d of %2$d posts restored. Keep this tab open.', 'native-tables-charts' ), (int) $rollback_progress['offset'], (int) $rollback_progress['total'] ); ?></p></div>
+		<script>(function(){setTimeout(function(){var f=document.getElementById('ntc-rollback-form');if(f){(f.requestSubmit||f.submit).call(f);}},600);})();</script>
+		<?php endif; ?>
+		</div>
 		<?php
 	}
 

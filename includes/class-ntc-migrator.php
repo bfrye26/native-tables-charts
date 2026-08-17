@@ -66,7 +66,7 @@ final class NTC_Migrator {
 		return $report;
 	}
 
-	public function migrate( bool $convert_content = true ): array {
+	public function migrate( bool $convert_content = true, int $offset = 0, int $chunk = 200 ): array {
 		if ( ! current_user_can( 'ntc_migrate' ) && ! current_user_can( 'manage_options' ) ) {
 			return array(
 				'success' => false,
@@ -150,10 +150,14 @@ final class NTC_Migrator {
 		$batch     = 'lt-' . gmdate( 'YmdHis' ) . '-' . wp_generate_password( 6, false, false );
 		$posts     = 0;
 		$instances = 0;
+		$total     = 0;
+		$processed = 0;
 		if ( $convert_content ) {
-			$result    = $this->convert_posts( $map, $batch );
+			$result    = $this->convert_posts( $map, $batch, $offset, $chunk );
 			$posts     = $result['posts'];
 			$instances = $result['instances'];
+			$total     = $result['total'];
+			$processed = $result['processed'];
 			$errors    = array_merge( $errors, $result['errors'] );}
 		return array(
 			'success'             => empty( $errors ),
@@ -163,6 +167,37 @@ final class NTC_Migrator {
 			'batch_id'            => $batch,
 			'errors'              => $errors,
 			'map'                 => $map,
+			'posts_total'         => $total,
+			'processed'           => $processed,
+			'posts_remaining'     => max( 0, $total - $processed - $offset ),
+		);
+	}
+
+	public function continue_migration( string $batch_id, int $offset, int $chunk = 200 ): array {
+		if ( ! current_user_can( 'ntc_migrate' ) && ! current_user_can( 'manage_options' ) ) {
+			return array(
+				'success' => false,
+				'error'   => __( 'Permission denied.', 'native-tables-charts' ),
+			);
+		}
+		$map = (array) get_option( 'ntc_migration_map', array() );
+		if ( ! $map ) {
+			return array(
+				'success'  => false,
+				'error'    => __( 'No migration map found.', 'native-tables-charts' ),
+				'batch_id' => $batch_id,
+			);
+		}
+		$result = $this->convert_posts( $map, $batch_id, $offset, $chunk );
+		return array(
+			'success'             => empty( $result['errors'] ),
+			'posts_updated'       => $result['posts'],
+			'instances_converted' => $result['instances'],
+			'batch_id'            => $batch_id,
+			'errors'              => $result['errors'],
+			'posts_total'         => $result['total'],
+			'processed'           => $result['processed'],
+			'posts_remaining'     => max( 0, $result['total'] - $result['processed'] - max( 0, $offset ) ),
 		);
 	}
 
@@ -485,9 +520,12 @@ final class NTC_Migrator {
 		return match ( $t ) {
 			'digit'=>'number', 'isoDate'=>'iso_date', 'usLongDate'=>'us_long_date', 'shortDate'=>'short_date', default=>sanitize_key( $t ? $t : 'auto' )};}
 
-	private function convert_posts( array $map, string $batch ): array {
+	private function convert_posts( array $map, string $batch, int $offset = 0, int $chunk = 200 ): array {
 		global $wpdb;
-		$posts = $wpdb->get_results( "SELECT ID,post_content FROM {$wpdb->posts} WHERE post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')", ARRAY_A );
+		$chunk = max( 1, min( 1000, $chunk ) );
+		$where = "post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')";
+		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE {$where}" ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
+		$posts = $wpdb->get_results( $wpdb->prepare( "SELECT ID,post_content FROM {$wpdb->posts} WHERE {$where} ORDER BY ID ASC LIMIT %d OFFSET %d", $chunk, max( 0, $offset ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
 		if ( ! $posts ) {
 			$posts = array();
 		}
@@ -495,9 +533,9 @@ final class NTC_Migrator {
 		$instances = 0;
 		$errors    = array();
 		foreach ( $posts as $p ) {
-			$original    = $p['post_content'];
-			$new         = $original;
-			$new         = preg_replace_callback(
+			$original = $p['post_content'];
+			$new      = $original;
+			$new      = preg_replace_callback(
 				'/\[lt\s+[^\]]*id=["\']?(\d+)["\']?[^\]]*\]/i',
 				function ( $m ) use ( $map, &$instances ) {
 					$old = (int) $m[1];
@@ -509,19 +547,19 @@ final class NTC_Migrator {
 				},
 				$new
 			);
-					$new = preg_replace_callback(
-						'/<!--\s+wp:dalt\/table\s+(\{.*?\})\s*\/-->/s',
-						function ( $m ) use ( $map, &$instances ) {
-								$a   = json_decode( $m[1], true );
-								$old = (int) ( $a['tableId'] ?? 0 );
-							if ( empty( $map[ $old ] ) ) {
-								return $m[0];
-							}$view = (int) get_option( 'ntc_lt_view_' . $old, 0 );
-								$instances++;
-								return '<!-- wp:ntc/table {"mode":"view","datasetId":' . (int) $map[ $old ] . ',"viewId":' . $view . '} /-->';
-						},
-						$new
-					);
+			$new      = preg_replace_callback(
+				'/<!--\s+wp:dalt\/table\s+(\{.*?\})\s*\/-->/s',
+				function ( $m ) use ( $map, &$instances ) {
+					$a   = json_decode( $m[1], true );
+					$old = (int) ( $a['tableId'] ?? 0 );
+					if ( empty( $map[ $old ] ) ) {
+						return $m[0];
+					}$view = (int) get_option( 'ntc_lt_view_' . $old, 0 );
+					$instances++;
+					return '<!-- wp:ntc/table {"mode":"view","datasetId":' . (int) $map[ $old ] . ',"viewId":' . $view . '} /-->';
+				},
+				$new
+			);
 			if ( $new !== $original ) {
 				$wpdb->insert(
 					$wpdb->prefix . 'ntc_backups',
@@ -551,12 +589,16 @@ final class NTC_Migrator {
 			'posts'     => $updated,
 			'instances' => $instances,
 			'errors'    => $errors,
+			'total'     => $total,
+			'processed' => count( $posts ),
 		);
 	}
 
-	public function rollback( string $batch ): array {
+	public function rollback( string $batch, int $offset = 0, int $chunk = 200 ): array {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}ntc_backups WHERE batch_id=%s ORDER BY id DESC", $batch ), ARRAY_A );
+		$chunk = max( 1, min( 1000, $chunk ) );
+		$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}ntc_backups WHERE batch_id=%s", $batch ) );
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}ntc_backups WHERE batch_id=%s ORDER BY id DESC LIMIT %d OFFSET %d", $batch, $chunk, max( 0, $offset ) ), ARRAY_A );
 		if ( ! $rows ) {
 			$rows = array();
 		}
@@ -576,8 +618,11 @@ final class NTC_Migrator {
 				++$restored;
 			}
 		}return array(
-			'success'  => empty( $errors ),
-			'restored' => $restored,
-			'errors'   => $errors,
+			'success'   => empty( $errors ),
+			'restored'  => $restored,
+			'errors'    => $errors,
+			'total'     => $total,
+			'processed' => count( $rows ),
+			'remaining' => max( 0, $total - count( $rows ) - max( 0, $offset ) ),
 		);}
 }
