@@ -49,5 +49,9 @@ $assert( false !== strpos( $updated, 'Last updated:' ), 'updated date renders La
 $assert( false !== strpos( $updated, '2026-08-17 10:00:00' ), 'updated date includes raw datetime' );
 $assert( 'redbackground:url(x)' === $call( 'safe_css_value', 'red;background:url(x)' ), 'safe_css_value strips ; {}<>' );
 $assert( '' === $call( 'css_length', '100%;background:red' ), 'css_length rejects injection' );
+$heat_cfg = array( 'autoColorRules' => array( array( 'type' => 'column', 'indexes' => array( 1 ), 'heatmap' => true, 'background' => '#ffffff', 'color' => '#000000' ) ) );
+$assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '50', array( 1 => array( 0, 100 ) ) ), 'background-color:#808080' ), 'heatmap midpoint' );
+$assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '0', array( 1 => array( 0, 100 ) ) ), 'background-color:#ffffff' ), 'heatmap low bound' );
+$assert( false !== strpos( $call( 'cell_style', array(), $heat_cfg, 0, 1, '100', array( 1 => array( 0, 100 ) ) ), 'background-color:#000000' ), 'heatmap high bound' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

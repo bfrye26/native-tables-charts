@@ -191,13 +191,14 @@ final class NTC_Renderer {
 				$label=$col['label']??('Column '.($ci+1));$hmeta=is_array($cell_meta['header:'.$ci]??null)?$cell_meta['header:'.$ci]:array();
 				$hrowspan=!empty($config['enableSorting'])?1:max(1,absint($hmeta['rowspan']??1));$hcolspan=!empty($config['enableSorting'])?1:max(1,absint($hmeta['colspan']??1));
 				if($hcolspan>1){for($hc=$ci+1;$hc<$ci+$hcolspan;$hc++){$header_skip[$hc]=true;}}
-				$hstyle=$this->cell_style($hmeta,$config,-1,$ci);$hattrs=' scope="col" data-col="'.esc_attr($ci).'"'.((!empty($config['enableSorting'])&&!empty($config['enableManualSorting']))?' aria-sort="none"':'');if($hstyle)$hattrs.=' style="'.esc_attr($hstyle).'"';if($hrowspan>1)$hattrs.=' rowspan="'.$hrowspan.'"';if($hcolspan>1)$hattrs.=' colspan="'.$hcolspan.'"';
+				$hstyle=$this->cell_style($hmeta,$config,-1,$ci,'',$heat);$hattrs=' scope="col" data-col="'.esc_attr($ci).'"'.((!empty($config['enableSorting'])&&!empty($config['enableManualSorting']))?' aria-sort="none"':'');if($hstyle)$hattrs.=' style="'.esc_attr($hstyle).'"';if($hrowspan>1)$hattrs.=' rowspan="'.$hrowspan.'"';if($hcolspan>1)$hattrs.=' colspan="'.$hcolspan.'"';
 				$out.='<th'.$hattrs.'>';if(!empty($config['enableSorting'])&&!empty($config['enableManualSorting'])){$out.='<button type="button" class="ntc-sort" data-column="'.esc_attr($ci).'" aria-sort="none">'.$this->render_cell($label,$hmeta,$config,true).'<span aria-hidden="true" class="ntc-sort-icon">↕</span></button>';}else{$out.=$this->render_cell($label,$hmeta,$config,true);} $out.='</th>';
 			}
 			if(!empty($config['showPosition']) && 'right'===$config['positionSide']){$out.='<th scope="col" class="ntc-position-head">'.esc_html($config['positionLabel']).'</th>';}
 			$out.='</tr></thead>';
 		}
 		$out.='<tbody>';
+		$heat = $this->heatmap_stats( $rows, $config, $columns );
 		$skip=array();
 		foreach($rows as $ri=>$row){
 			$meta_ri=isset($row['_ntc_index'])?(int)$row['_ntc_index']:$ri;
@@ -212,7 +213,7 @@ final class NTC_Renderer {
 				$date_format=$col['format']??'';
 				if('short_date'===strtolower((string)$type)){foreach((array)($config['defaultSort']??array()) as $sort_rule){if(absint($sort_rule['column']??-1)===$ci&&!empty($sort_rule['dateFormat'])){$date_format=(string)$sort_rule['dateFormat'];break;}}}
 				$sort=$this->sort_value($value,$type,$date_format,$config['numberFormat']??'us');
-				$style=$this->cell_style($meta,$config,$ri,$ci);
+				$style=$this->cell_style($meta,$config,$ri,$ci,$row[$ci]??'',$heat);
 				$attrs=' data-label="'.esc_attr($col['label']??'').'" data-sort="'.esc_attr($sort).'"';
 				if($rowspan>1){$attrs.=' rowspan="'.$rowspan.'"';}if($colspan>1){$attrs.=' colspan="'.$colspan.'"';}
 				if($style){$attrs.=' style="'.esc_attr($style).'"';}
@@ -240,14 +241,78 @@ final class NTC_Renderer {
 		return $left.$content.$right;
 	}
 
-	private function cell_style(array $meta,array $config,int $ri,int $ci): string {
-		$styles=array();
-		$map=array('textColor'=>'color','backgroundColor'=>'background-color','fontWeight'=>'font-weight','fontStyle'=>'font-style','alignment'=>'text-align','verticalAlign'=>'vertical-align');
-		$whitelist=array('alignment'=>array('left','center','right','justify'),'verticalAlign'=>array('top','middle','bottom'),'fontWeight'=>array('100','200','300','400','500','600','700','800','900'),'fontStyle'=>array('normal','italic','oblique'));
-		foreach($map as $k=>$css){if(!empty($meta[$k])){$v=(string)$meta[$k];if(isset($whitelist[$k])&&!in_array($v,$whitelist[$k],true))continue;if(str_contains($k,'Color')&&!preg_match('/^(#[0-9a-f]{3,8}|rgb|hsl|var\()/i',$v))continue;$styles[]=$css.':'.$v;}}
-		foreach((array)$config['autoColorRules'] as $rule){$applies=$this->rule_applies($rule,$ri,$ci);if(!$applies)continue;if(!empty($rule['background'])&&preg_match('/^(#[0-9a-f]{3,8}|rgb|hsl|var\()/i',(string)$rule['background']))$styles[]='background-color:'.$rule['background'];if(!empty($rule['color'])&&preg_match('/^(#[0-9a-f]{3,8}|rgb|hsl|var\()/i',(string)$rule['color']))$styles[]='color:'.$rule['color'];}
-		foreach((array)$config['autoAlignRules'] as $rule){if($this->rule_applies($rule,$ri,$ci)&&!empty($rule['align'])&&in_array($rule['align'],array('left','center','right','justify'),true))$styles[]='text-align:'.$rule['align'];}
-		return implode(';',$styles);
+	private function cell_style( array $meta, array $config, int $ri, int $ci, $value = '', array $heat = array() ): string {
+		$styles = array();
+		$map = array( 'textColor' => 'color', 'backgroundColor' => 'background-color', 'fontWeight' => 'font-weight', 'fontStyle' => 'font-style', 'alignment' => 'text-align', 'verticalAlign' => 'vertical-align' );
+		$whitelist = array(
+			'alignment' => array( 'left', 'center', 'right', 'justify' ),
+			'verticalAlign' => array( 'top', 'middle', 'bottom' ),
+			'fontWeight' => array( '100', '200', '300', '400', '500', '600', '700', '800', '900' ),
+			'fontStyle' => array( 'normal', 'italic', 'oblique' ),
+		);
+		foreach ( $map as $k => $css ) {
+			if ( empty( $meta[ $k ] ) ) { continue; }
+			$v = (string) $meta[ $k ];
+			if ( isset( $whitelist[ $k ] ) && ! in_array( $v, $whitelist[ $k ], true ) ) { continue; }
+			if ( str_contains( $k, 'Color' ) && ! preg_match( '/^(#[0-9a-f]{3,8}|rgb|hsl|var\()/i', $v ) ) { continue; }
+			$styles[] = $css . ':' . $v;
+		}
+		foreach ( (array) $config['autoColorRules'] as $rule ) {
+			if ( ! $this->rule_applies( $rule, $ri, $ci ) ) { continue; }
+			if ( ! empty( $rule['heatmap'] ) && 'column' === ( $rule['type'] ?? 'row' ) && isset( $heat[ $ci ] ) ) {
+				$n = NTC_Formulas::numeric( $value );
+				$range = $heat[ $ci ];
+				$t = ( $n - $range[0] ) / ( $range[1] - $range[0] );
+				$bg = self::lerp_color( (string) ( $rule['background'] ?? '#ffffff' ), (string) ( $rule['color'] ?? '#9e2f5f' ), (float) $t );
+				if ( $bg ) { $styles[] = 'background-color:' . $bg; }
+				continue;
+			}
+			if ( ! empty( $rule['background'] ) && preg_match( '/^(#[0-9a-f]{3,8}|rgb|hsl|var\()/i', (string) $rule['background'] ) ) { $styles[] = 'background-color:' . $rule['background']; }
+			if ( ! empty( $rule['color'] ) && preg_match( '/^(#[0-9a-f]{3,8}|rgb|hsl|var\()/i', (string) $rule['color'] ) ) { $styles[] = 'color:' . $rule['color']; }
+		}
+		foreach ( (array) ( $config['autoAlignRules'] ?? array() ) as $rule ) {
+			if ( $this->rule_applies( $rule, $ri, $ci ) && ! empty( $rule['align'] ) && in_array( $rule['align'], array( 'left', 'center', 'right', 'justify' ), true ) ) { $styles[] = 'text-align:' . $rule['align']; }
+		}
+		return implode( ';', $styles );
+	}
+
+	private static function hex_to_rgb( string $hex ): ?array {
+		$hex = ltrim( trim( $hex ), '#' );
+		if ( 3 === strlen( $hex ) ) { $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2]; }
+		if ( ! preg_match( '/^[0-9a-f]{6}$/i', $hex ) ) { return null; }
+		return array_map( 'hexdec', str_split( $hex, 2 ) );
+	}
+
+	private static function lerp_color( string $a, string $b, float $t ): string {
+		$ra = self::hex_to_rgb( $a ); $rb = self::hex_to_rgb( $b );
+		if ( ! $ra || ! $rb ) { return $a; }
+		$t = max( 0.0, min( 1.0, $t ) );
+		$c = array();
+		foreach ( array( 0, 1, 2 ) as $i ) { $c[] = (int) round( $ra[ $i ] + ( $rb[ $i ] - $ra[ $i ] ) * $t ); }
+		return sprintf( '#%02x%02x%02x', $c[0], $c[1], $c[2] );
+	}
+
+	private function heatmap_stats( array $rows, array $config, array $columns ): array {
+		$heat_cols = array();
+		foreach ( (array) ( $config['autoColorRules'] ?? array() ) as $rule ) {
+			if ( ! empty( $rule['heatmap'] ) && 'column' === ( $rule['type'] ?? 'row' ) ) {
+				$heat_cols = array_merge( $heat_cols, array_map( 'intval', (array) $rule['indexes'] ) );
+			}
+		}
+		if ( ! $heat_cols ) { return array(); }
+		$stats = array();
+		foreach ( $heat_cols as $ci ) { $stats[ $ci ] = array( PHP_FLOAT_MAX, PHP_FLOAT_MIN ); }
+		foreach ( $rows as $row ) {
+			foreach ( $heat_cols as $ci ) {
+				$n = NTC_Formulas::numeric( $row[ $ci ] ?? '' );
+				if ( $n < $stats[ $ci ][0] ) { $stats[ $ci ][0] = $n; }
+				if ( $n > $stats[ $ci ][1] ) { $stats[ $ci ][1] = $n; }
+			}
+		}
+		foreach ( $stats as $ci => $range ) {
+			if ( PHP_FLOAT_MAX === $range[0] || $range[0] === $range[1] ) { unset( $stats[ $ci ] ); }
+		}
+		return $stats;
 	}
 
 	private function rule_applies(array $rule,int $ri,int $ci): bool {
