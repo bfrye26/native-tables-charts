@@ -114,12 +114,19 @@ final class NTC_Admin {
 			} else {
 				$result = $this->migrator->migrate( $convert, 0, $chunk );
 			}
-			$batch_id   = (string) ( $result['batch_id'] ?? $batch_id );
-			$total      = (int) ( $result['posts_total'] ?? 0 );
-			$new_offset = $offset + (int) ( $result['processed'] ?? 0 );
-			$done       = ! $convert || empty( $batch_id ) || ( 0 === (int) ( $result['posts_remaining'] ?? 0 ) );
-			$uid        = get_current_user_id();
+			$batch_id      = (string) ( $result['batch_id'] ?? $batch_id );
+			$total         = (int) ( $result['posts_total'] ?? 0 );
+			$new_offset    = $offset + (int) ( $result['processed'] ?? 0 );
+			$done          = ! $convert || empty( $batch_id ) || ( 0 === (int) ( $result['posts_remaining'] ?? 0 ) );
+			$uid           = get_current_user_id();
+			$prev          = get_transient( 'ntc_migration_progress_' . $uid );
+			$acc_errors    = array_merge( is_array( $prev ) ? (array) ( $prev['errors'] ?? array() ) : array(), (array) ( $result['errors'] ?? array() ) );
+			$acc_posts     = ( is_array( $prev ) ? (int) ( $prev['posts'] ?? 0 ) : 0 ) + (int) ( $result['posts_updated'] ?? 0 );
+			$acc_instances = ( is_array( $prev ) ? (int) ( $prev['instances'] ?? 0 ) : 0 ) + (int) ( $result['instances_converted'] ?? 0 );
 			if ( $done ) {
+				$result['errors']              = $acc_errors;
+				$result['posts_updated']       = $acc_posts;
+				$result['instances_converted'] = $acc_instances;
 				delete_transient( 'ntc_migration_progress_' . $uid );
 				set_transient( 'ntc_migration_result_' . $uid, $result, 30 * MINUTE_IN_SECONDS );
 				$this->redirect( 'ntc-migration', 'migrated=1' );
@@ -127,12 +134,14 @@ final class NTC_Admin {
 			set_transient(
 				'ntc_migration_progress_' . $uid,
 				array(
-					'done'     => false,
-					'convert'  => $convert,
-					'batch_id' => $batch_id,
-					'offset'   => $new_offset,
-					'total'    => $total,
-					'result'   => $result,
+					'done'      => false,
+					'convert'   => $convert,
+					'batch_id'  => $batch_id,
+					'offset'    => $new_offset,
+					'total'     => $total,
+					'errors'    => $acc_errors,
+					'posts'     => $acc_posts,
+					'instances' => $acc_instances,
 				),
 				HOUR_IN_SECONDS
 			);
@@ -156,13 +165,18 @@ final class NTC_Admin {
 			}set_transient( 'ntc_migration_result_' . get_current_user_id(), $result, 30 * MINUTE_IN_SECONDS );
 			$this->redirect( 'ntc-migration', 'xmlimport=1' );}
 		if ( 'migration_rollback' === $action && current_user_can( 'ntc_migrate' ) ) {
-			$batch      = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? '' ) );
-			$offset     = absint( $_POST['offset'] ?? 0 );
-			$result     = $this->migrator->rollback( $batch, $offset, 200 );
-			$uid        = get_current_user_id();
-			$new_offset = $offset + (int) ( $result['processed'] ?? 0 );
-			$done       = 0 === (int) ( $result['remaining'] ?? 0 );
+			$batch        = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? '' ) );
+			$offset       = absint( $_POST['offset'] ?? 0 );
+			$result       = $this->migrator->rollback( $batch, $offset, 200 );
+			$uid          = get_current_user_id();
+			$prev         = get_transient( 'ntc_rollback_progress_' . $uid );
+			$acc_errors   = array_merge( is_array( $prev ) ? (array) ( $prev['errors'] ?? array() ) : array(), (array) ( $result['errors'] ?? array() ) );
+			$acc_restored = ( is_array( $prev ) ? (int) ( $prev['restored'] ?? 0 ) : 0 ) + (int) ( $result['restored'] ?? 0 );
+			$new_offset   = $offset + (int) ( $result['processed'] ?? 0 );
+			$done         = 0 === (int) ( $result['remaining'] ?? 0 );
 			if ( $done ) {
+				$result['errors']   = $acc_errors;
+				$result['restored'] = $acc_restored;
 				delete_transient( 'ntc_rollback_progress_' . $uid );
 				set_transient( 'ntc_migration_result_' . $uid, $result, 30 * MINUTE_IN_SECONDS );
 				$this->redirect( 'ntc-migration', 'rolledback=1' );
@@ -174,7 +188,8 @@ final class NTC_Admin {
 					'batch_id' => $batch,
 					'offset'   => $new_offset,
 					'total'    => (int) ( $result['total'] ?? 0 ),
-					'result'   => $result,
+					'errors'   => $acc_errors,
+					'restored' => $acc_restored,
 				),
 				HOUR_IN_SECONDS
 			);
@@ -534,9 +549,9 @@ endif;
 			?>
 			<h2><?php esc_html_e( 'Latest Migration Result', 'native-tables-charts' ); ?></h2><pre class="ntc-result"><?php echo esc_html( wp_json_encode( $result, JSON_PRETTY_PRINT ) ); ?></pre>
 			<?php
-			if ( ! empty( $result['batch_id'] ) ) :
+			if ( ! empty( $result['batch_id'] ) || ! empty( $rollback_progress['batch_id'] ) ) :
 				?>
-			<form method="post" id="ntc-rollback-form" onsubmit="return this.elements.offset.value!=0||confirm('<?php echo esc_js( __( 'Restore the original post content from this migration batch?', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_rollback"><input type="hidden" name="batch_id" value="<?php echo esc_attr( $result['batch_id'] ); ?>"><input type="hidden" name="offset" value="<?php echo esc_attr( $rollback_progress['offset'] ?? '0' ); ?>"><button class="button"><?php esc_html_e( 'Rollback This Batch', 'native-tables-charts' ); ?></button></form><?php endif; ?><?php endif; ?>
+			<form method="post" id="ntc-rollback-form" onsubmit="return this.elements.offset.value!=0||confirm('<?php echo esc_js( __( 'Restore the original post content from this migration batch?', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_rollback"><input type="hidden" name="batch_id" value="<?php echo esc_attr( ( $rollback_progress['batch_id'] ?? ( $result['batch_id'] ?? '' ) ) ); ?>"><input type="hidden" name="offset" value="<?php echo esc_attr( $rollback_progress['offset'] ?? '0' ); ?>"><button class="button"><?php esc_html_e( 'Rollback This Batch', 'native-tables-charts' ); ?></button></form><?php endif; ?><?php endif; ?>
 		<?php if ( is_array( $migration_progress ) && empty( $migration_progress['done'] ) ) : ?>
 			<?php /* translators: 1: number of posts processed so far, 2: total posts to process. */ ?>
 		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d posts processed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['offset'], (int) $migration_progress['total'] ); ?></p></div>
