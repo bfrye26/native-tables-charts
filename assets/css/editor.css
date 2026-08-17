@@ -37,3 +37,14 @@
 .ntc-preset-preview{height:76px;border-radius:4px;overflow:hidden;position:relative;box-sizing:border-box}.ntc-preset-preview.is-compact{height:48px}.ntc-preset-preview-chart{padding:9px 9px 7px}.ntc-preset-preview-chart .ntc-preset-preview-title{display:block;width:44%;height:5px;border-radius:2px;margin-bottom:10px;opacity:.92}.ntc-preset-preview-chart .ntc-preset-preview-grid{position:absolute;left:31%;right:9px;top:27px;bottom:7px;border-left:1px solid;border-right:1px solid;opacity:.55}.ntc-preset-preview-chart .ntc-preset-preview-bar{display:block;height:7px;margin:5px 0 5px 28%;border-radius:1px;position:relative;z-index:1}.ntc-preset-preview-chart.is-compact .ntc-preset-preview-title{margin-bottom:4px;height:4px}.ntc-preset-preview-chart.is-compact .ntc-preset-preview-grid{top:19px}.ntc-preset-preview-chart.is-compact .ntc-preset-preview-bar{height:4px;margin-top:3px;margin-bottom:3px}
 .ntc-preset-preview-table{border:1px solid;padding:0;display:grid;grid-template-rows:18px repeat(3,1fr)}.ntc-preset-preview-table>span{display:block;border-top:1px solid rgba(127,127,127,.15)}.ntc-preset-preview-table-head{border-top:0!important}.ntc-preset-preview-table.is-compact{grid-template-rows:12px repeat(3,1fr)}
 @media (max-width:600px){.ntc-preset-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ntc-preset-current{grid-template-columns:74px minmax(0,1fr)}}
+/* 1.1.1 dataset picker list */
+.ntc-dataset-modal{width:min(92vw,640px)!important;max-width:min(92vw,640px)!important}
+.ntc-picker-body{max-height:50vh;overflow:auto;padding-right:4px;margin:0 -4px 0 0}
+.ntc-picker-list{display:flex;flex-direction:column;gap:3px;margin:0 0 14px}
+.ntc-picker-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:1px solid #dcdcde;border-radius:4px;background:#fff;text-align:left;cursor:pointer;font-size:13px}
+.ntc-picker-row:hover{border-color:#2271b1}
+.ntc-picker-row.is-selected{border-color:#3858e9;box-shadow:0 0 0 1px #3858e9}
+.ntc-picker-radio{width:14px;height:14px;border:2px solid #949494;border-radius:50%;flex:0 0 auto;box-sizing:border-box}
+.ntc-picker-row.is-selected .ntc-picker-radio{border-color:#3858e9;background:radial-gradient(circle,#3858e9 0 4px,transparent 4px)}
+.ntc-picker-name{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:500}
+.ntc-picker-meta{color:#646970;font-size:11px;white-space:nowrap}

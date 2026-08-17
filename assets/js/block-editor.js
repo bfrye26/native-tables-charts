@@ -197,20 +197,24 @@ function ExportModal({columns,rows,onClose,type}){
 }
 
 function DatasetPicker({onClose,onPick,type}){
- const [items,setItems]=useState(null);const [views,setViews]=useState(null);const [search,setSearch]=useState('');
+ const [items,setItems]=useState(null);const [views,setViews]=useState(null);const [search,setSearch]=useState('');const [selected,setSelected]=useState(null);
  const load=()=>Promise.all([
    apiFetch({path:'/ntc/v1/datasets?per_page=250&search='+encodeURIComponent(search)}),
    apiFetch({path:'/ntc/v1/views?type='+encodeURIComponent(type||'')})
  ]).then(([d,v])=>{setItems(d||[]);const q=search.toLowerCase();setViews((v||[]).filter(x=>!q||String(x.name||'').toLowerCase().includes(q)));});
  useEffect(load,[]);
- return h(Modal,{title:__('Choose Existing Data or View','native-tables-charts'),onRequestClose:onClose},
+ const use=()=>{if(selected){onPick(selected);onClose();}};
+ const row=(it,kind)=>h('button',{type:'button',key:kind+it.id,className:'ntc-picker-row'+(selected&&selected.kind===kind&&selected.item.id===it.id?' is-selected':''),onClick:()=>setSelected({kind,item:it}),onDoubleClick:use},
+  h('span',{className:'ntc-picker-radio','aria-hidden':'true'}),h('span',{className:'ntc-picker-name'},it.name),h('span',{className:'ntc-picker-meta'},kind==='dataset'?it.row_count+' '+__('rows','native-tables-charts'):''));
+ return h(Modal,{title:__('Choose Existing Data or View','native-tables-charts'),onRequestClose:onClose,className:'ntc-dataset-modal'},
   h('div',{className:'ntc-inline-actions'},h(TextControl,{label:__('Search','native-tables-charts'),value:search,onChange:setSearch}),h(Button,{variant:'secondary',onClick:load},__('Search','native-tables-charts'))),
-  (items===null||views===null)?h(Spinner):h(wp.element.Fragment,null,
+  (items===null||views===null)?h(Spinner):h('div',{className:'ntc-picker-body'},
    h('h3',null,type==='chart'?__('Synced Charts','native-tables-charts'):__('Synced Tables','native-tables-charts')),
-   views.length?h('div',{className:'ntc-dataset-picker'},views.map(v=>h(Button,{key:'v'+v.id,variant:'secondary',onClick:()=>onPick({kind:'view',item:v})},v.name))):h('p',{className:'ntc-inspector-note'},__('No matching synced views.','native-tables-charts')),
+   views.length?h('div',{className:'ntc-picker-list'},views.map(v=>row(v,'view'))):h('p',{className:'ntc-inspector-note'},__('No matching synced views.','native-tables-charts')),
    h('h3',null,__('Reusable Datasets','native-tables-charts')),
-   items.length?h('div',{className:'ntc-dataset-picker'},items.map(d=>h(Button,{key:'d'+d.id,variant:'secondary',onClick:()=>onPick({kind:'dataset',item:d})},d.name+' ('+d.row_count+' rows)'))):h('p',null,__('No datasets found.','native-tables-charts'))
-  )
+   items.length?h('div',{className:'ntc-picker-list'},items.map(d=>row(d,'dataset'))):h('p',null,__('No datasets found.','native-tables-charts'))
+  ),
+  h('div',{className:'ntc-inline-actions'},h(Button,{variant:'tertiary',onClick:onClose},__('Cancel','native-tables-charts')),h(Button,{variant:'primary',disabled:!selected,onClick:use},__('Use selection','native-tables-charts')))
  );
 }
 
