@@ -34,5 +34,14 @@ $GLOBALS['fake_http'] = array( 'response' => array( 'code' => 404 ), 'body' => '
 $threw = false;
 try { NTC_Sync::fetch( 'https://example.com/x.csv' ); } catch ( Throwable $e ) { $threw = true; }
 $assert( $threw, 'fetch throws on 404' );
+$r = ( new ReflectionClass( 'NTC_Renderer' ) )->newInstanceWithoutConstructor();
+$call = function ( string $m, ...$a ) use ( $r ) { $mm = ( new ReflectionClass( 'NTC_Renderer' ) )->getMethod( $m ); $mm->setAccessible( true ); return $mm->invokeArgs( $r, $a ); };
+$assert( '' === $call( 'schema_json', array( 'dataset_updated_at' => '2026-08-17 10:00:00' ), array( 'enableSchema' => false ), array() ), 'schema off returns empty' );
+$schema = $call( 'schema_json', array( 'dataset_updated_at' => '2026-08-17 10:00:00', 'dataset_name' => 'Scores' ), array( 'enableSchema' => true, 'title' => 'Bench', 'valueColumns' => array( 1 ) ), array( array(), array( 'label' => 'Score', 'type' => 'number', 'unit' => 'fps' ) ) );
+$assert( false !== strpos( $schema, '"@type":"Dataset"' ) && false !== strpos( $schema, 'variableMeasured' ), 'schema emits Dataset + variables' );
+$assert( false === strpos( $schema, '</script><script' ), 'schema values escaped' );
+$assert( '' === $call( 'updated_date_html', array( 'showUpdatedDate' => false ), array( 'dataset_updated_at' => 'x' ) ), 'updated date off returns empty' );
+$assert( 'redbackground:url(x)' === $call( 'safe_css_value', 'red;background:url(x)' ), 'safe_css_value strips ; {}<>' );
+$assert( '' === $call( 'css_length', '100%;background:red' ), 'css_length rejects injection' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

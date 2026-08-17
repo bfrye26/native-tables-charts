@@ -31,6 +31,7 @@ final class NTC_Renderer {
 			'captionTextAlign'=>'left','captionFontFamily'=>'inherit','captionFontWeight'=>'400','captionFontStyle'=>'normal','captionColor'=>'',
 			'headerLinkColor'=>'','headerBorderColor'=>'','headerPositionAlign'=>'center','oddColor'=>'','evenColor'=>'','oddLinkColor'=>'','evenLinkColor'=>'','averageDecimals'=>2,'averageRound'=>'half_up',
 			'autoColorRules'=>array(),'autoAlignRules'=>array(),'enableCellProperties'=>true,'customClass'=>'',
+			'enableSearch'=>false,'enablePagination'=>false,'rowsPerPage'=>10,'enableExport'=>false,'enableSchema'=>false,'showUpdatedDate'=>false,
 		);
 	}
 
@@ -45,6 +46,7 @@ final class NTC_Renderer {
 			'mobileTitleFontSize'=>24,'mobileLabelFontSize'=>13,'mobileValueFontSize'=>13,'mobileAxisFontSize'=>10,'mobileLegendFontSize'=>11,'mobileFooterFontSize'=>10,
 			'density'=>'auto','barHeight'=>26,'barGap'=>10,'panelGap'=>30,'mobileBreakpoint'=>620,
 			'accessibleDataMode'=>'screenreader','customClass'=>'',
+			'enableExport'=>false,'enableSchema'=>false,'themeMode'=>'fixed','darkBackground'=>'#0f131a','darkTextColor'=>'#e6e9ee','darkMutedColor'=>'#9aa5b1','darkGridColor'=>'#2a3442','showUpdatedDate'=>false,
 		);
 	}
 
@@ -103,11 +105,51 @@ final class NTC_Renderer {
 			$view=$this->repo->get_view($view_id);
 			if($view && $view['type']===$type){$dataset_id=(int)$view['dataset_id'];$view_config=(array)$view['config'];if('table'===$type && !empty($view_config['cellMeta']) && is_array($view_config['cellMeta'])){$cell_meta=array_merge($cell_meta,$view_config['cellMeta']);unset($view_config['cellMeta']);}$config=array_merge($config,$view_config);$mode='view';}
 		}
+		$dataset_updated_at = null; $dataset_name = null;
 		if ( $dataset_id ) {
-			$dataset=$this->repo->get_dataset($dataset_id,false);
-			if($dataset){$columns=$dataset['columns'];$rows=$this->repo->get_rows($dataset_id);}
+			$dataset = $this->repo->get_dataset( $dataset_id, false );
+			if ( $dataset ) {
+				$columns = $dataset['columns'];
+				$rows = $this->repo->get_rows( $dataset_id );
+				$dataset_updated_at = $dataset['updated_at'] ?? null;
+				$dataset_name = $dataset['name'] ?? null;
+			}
 		}
-		return compact('mode','columns','rows','config','cell_meta','dataset_id','view_id');
+		return compact( 'mode', 'columns', 'rows', 'config', 'cell_meta', 'dataset_id', 'view_id', 'dataset_updated_at', 'dataset_name' );
+	}
+
+	private function schema_json( array $data, array $config, array $columns ): string {
+		if ( empty( $config['enableSchema'] ) ) { return ''; }
+		$name = (string) ( $config['title'] ?? '' );
+		if ( '' === $name ) { $name = (string) ( $config['caption'] ?? '' ); }
+		if ( '' === $name && ! empty( $data['dataset_name'] ) ) { $name = (string) $data['dataset_name']; }
+		if ( '' === $name ) { return ''; }
+		$date = $data['dataset_updated_at'] ?? '';
+		if ( '' === $date ) {
+			$post = get_post();
+			$date = $post ? get_post_modified_time( 'c', true, $post ) : '';
+		}
+		$variables = array();
+		$value_cols = array_map( 'absint', (array) ( $config['valueColumns'] ?? array() ) );
+		foreach ( $value_cols as $v ) {
+			$col = $columns[ $v ] ?? null;
+			if ( ! $col || in_array( (string) ( $col['type'] ?? 'auto' ), array( 'text', 'url', 'sparkline', 'delta' ), true ) ) { continue; }
+			$variables[] = array( '@type' => 'PropertyValue', 'name' => $col['label'] ?? '', 'unitText' => $col['unit'] ?? '' );
+		}
+		$payload = array(
+			'@context' => 'https://schema.org',
+			'@type' => 'Dataset',
+			'name' => esc_html( $name ),
+			'description' => esc_html( (string) ( $config['subtitle'] ?? '' ) ),
+			'dateModified' => esc_html( (string) $date ),
+		);
+		if ( $variables ) { $payload['variableMeasured'] = $variables; }
+		return '<script type="application/ld+json">' . wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '</script>';
+	}
+
+	private function updated_date_html( array $config, array $data ): string {
+		if ( empty( $config['showUpdatedDate'] ) || empty( $data['dataset_updated_at'] ) ) { return ''; }
+		return '<div class="ntc-updated">' . esc_html( sprintf( __( 'Last updated: %s', 'native-tables-charts' ), get_date_from_gmt( $data['dataset_updated_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) ) . '</div>';
 	}
 
 	public function render_table( array $attributes ): string {
@@ -179,7 +221,9 @@ final class NTC_Renderer {
 			if(!empty($config['showPosition']) && 'right'===$config['positionSide']){$out.='<th scope="row" class="ntc-position">'.esc_html($ri+1).'</th>';}
 			$out.='</tr>';
 		}
-		$out.='</tbody></table></div></div>';
+		$out.='</tbody></table></div>';
+		$out .= $this->updated_date_html( $config, $data );
+		$out .= '</div>' . $this->schema_json( $data, $config, $columns );
 		if(!empty($config['enableSorting'])&&!empty($config['enableManualSorting'])){wp_enqueue_script('ntc-frontend');}
 		return $out;
 	}
@@ -364,13 +408,13 @@ final class NTC_Renderer {
 			default:$out.=$this->chart_horizontal($chart_rows,$columns,$config);break;
 		}
 		$out.='</div>';if(!empty($config['axisLabel'])){$out.='<div class="ntc-chart-axis-label">'.esc_html($config['axisLabel']).'</div>';}
-		if($config['footer']||$config['secondaryFooter']||$config['source']){$out.='<figcaption class="ntc-chart-footer">';if($config['footer'])$out.='<div>'.esc_html($config['footer']).'</div>';if($config['secondaryFooter'])$out.='<div>'.esc_html($config['secondaryFooter']).'</div>';if($config['source'])$out.='<div>'.esc_html($config['source']).'</div>';$out.='</figcaption>';}
+		if($config['footer']||$config['secondaryFooter']||$config['source']){$out.='<figcaption class="ntc-chart-footer">';if($config['footer'])$out.='<div>'.esc_html($config['footer']).'</div>';if($config['secondaryFooter'])$out.='<div>'.esc_html($config['secondaryFooter']).'</div>';if($config['source'])$out.='<div>'.esc_html($config['source']).'</div>';$out.=$this->updated_date_html( $config, $data );$out.='</figcaption>';}
 		$data_mode=sanitize_key((string)($config['accessibleDataMode']??'screenreader'));
 		if(!in_array($data_mode,array('screenreader','collapsible','visible','disabled'),true)){$data_mode='screenreader';}
 		if('collapsible'===$data_mode){$out.='<details class="ntc-chart-data"><summary>'.esc_html__('View chart data','native-tables-charts').'</summary>'.$this->accessible_chart_table($chart_rows,$columns,$config).'</details>';}
 		elseif('visible'===$data_mode){$out.='<section class="ntc-chart-data ntc-chart-data-visible"><h4>'.esc_html__('Chart data','native-tables-charts').'</h4>'.$this->accessible_chart_table($chart_rows,$columns,$config).'</section>';}
 		elseif('screenreader'===$data_mode){$out.='<div class="ntc-chart-data-sr ntc-sr-only">'.$this->accessible_chart_table($chart_rows,$columns,$config).'</div>';}
-		$out.='</figure>';
+		$out.='</figure>'.$this->schema_json( $data, $config, $columns );
 		return $out;
 	}
 
