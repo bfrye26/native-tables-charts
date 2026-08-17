@@ -1,9 +1,6 @@
 <?php
 require __DIR__ . '/bootstrap.php';
-require dirname( __DIR__ ) . '/includes/class-ntc-formulas.php';
-require dirname( __DIR__ ) . '/includes/class-ntc-renderer.php';
-require dirname( __DIR__ ) . '/includes/class-ntc-rest.php';
-require dirname( __DIR__ ) . '/includes/class-ntc-activator.php';
+require dirname( __DIR__ ) . '/native-tables-charts.php';
 $fails = 0;
 $assert = function ( $cond, $label ) use ( &$fails ) { if ( $cond ) { echo "ok   $label\n"; } else { echo "FAIL $label\n"; $fails++; } };
 $assert( "'=SUM(A1)" === NTC_REST::guard_csv_cell( '=SUM(A1)' ), 'guard prefixes =' );
@@ -24,7 +21,6 @@ $repo->set_source( 1, 'https://example.com/data.csv' );
 $assert( 'https://example.com/data.csv' === $GLOBALS['last_update'][0]['source_url'], 'set_source accepts https URL' );
 $repo->record_sync( 1, 'boom' );
 $assert( 'boom' === $GLOBALS['last_update'][0]['source_error'], 'record_sync stores error' );
-require dirname( __DIR__ ) . '/includes/class-ntc-sync.php';
 $parsed = NTC_Sync::parse( $repo, "Name,Score\nA,10\nB,20", 'csv' );
 $assert( 2 === count( $parsed['columns'] ) && 2 === count( $parsed['rows'] ), 'csv parse columns/rows' );
 $assert( 'A' === $parsed['rows'][0][0], 'csv parse first cell' );
@@ -66,5 +62,9 @@ $assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), f
 $assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '10,20,30' ), 'sparkline keeps raw value (sr-only)' );
 $assert( false !== strpos( $call( 'render_cell', '+12.5%', array(), array(), false, 'delta' ), 'is-up' ), 'delta positive class' );
 $assert( false !== strpos( $call( 'render_cell', '-3', array(), array(), false, 'delta' ), 'is-down' ), 'delta negative class' );
+$ntc = NTC_Plugin::instance();
+$assert( '' === $ntc->shortcode_dataset( array( 'id' => 0 ) ), 'shortcode empty without id' );
+$out = $ntc->shortcode_dataset( array( 'id' => 99, 'type' => 'table' ) );
+$assert( false !== strpos( $out, 'ntc-table-wrap' ), 'shortcode renders table markup' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

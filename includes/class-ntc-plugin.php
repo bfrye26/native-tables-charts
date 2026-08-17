@@ -25,6 +25,32 @@ final class NTC_Plugin {
 		add_filter('block_categories_all',array($this,'block_category'),10,2);
 		add_action('wp_enqueue_scripts',array($this,'register_frontend_assets'),1);
 		add_action('save_post',array($this,'invalidate_usage_cache'));
+		add_shortcode( 'ntc_dataset', array( $this, 'shortcode_dataset' ) );
+	}
+
+	public function shortcode_dataset( $atts ): string {
+		$a = shortcode_atts( array( 'id' => 0, 'view' => 0, 'type' => 'table' ), $atts, 'ntc_dataset' );
+		$id = absint( $a['id'] );
+		if ( ! $id ) { return ''; }
+		$view_id = absint( $a['view'] );
+		$attributes = array( 'mode' => 'dataset', 'datasetId' => $id, 'viewId' => $view_id, 'columns' => array(), 'rows' => array(), 'config' => array(), 'cellMeta' => array(), 'widthMode' => 'content', 'align' => '' );
+		if ( $view_id ) {
+			$view = $this->repo->get_view( $view_id );
+			if ( $view ) {
+				$attributes['mode'] = 'view';
+				$attributes['config'] = (array) $view['config'];
+				if ( 'table' === $view['type'] && ! empty( $view['config']['cellMeta'] ) && is_array( $view['config']['cellMeta'] ) ) {
+					$attributes['cellMeta'] = $view['config']['cellMeta'];
+					unset( $attributes['config']['cellMeta'] );
+				}
+				return 'chart' === $view['type'] ? $this->renderer->render_chart( $attributes ) : $this->renderer->render_table( $attributes );
+			}
+		}
+		if ( 'chart' === sanitize_key( $a['type'] ) ) {
+			$attributes['config'] = array( 'chartType' => 'horizontal-bar', 'labelColumn' => 0, 'valueColumns' => array( 1 ), 'preset' => 'benchmark-dark' );
+			return $this->renderer->render_chart( $attributes );
+		}
+		return $this->renderer->render_table( $attributes );
 	}
 
 	public function register_frontend_assets(): void {

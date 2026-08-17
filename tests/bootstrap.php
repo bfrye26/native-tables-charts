@@ -1,7 +1,7 @@
 <?php
 define( 'ABSPATH', __DIR__ . '/' );
-if ( ! defined( 'NTC_VERSION' ) ) { define( 'NTC_VERSION', '1.1.0' ); }
 define( 'MB_IN_BYTES', 1048576 );
+define( 'ARRAY_A', 'ARRAY_A' );
 define( 'HOUR_IN_SECONDS', 3600 );
 define( 'MINUTE_IN_SECONDS', 60 );
 function __( $s, $d = null ) { return $s; }
@@ -46,6 +46,21 @@ class WP_REST_Response { public $data; public $status; public function __constru
 function rest_ensure_response( $d ) { return $d instanceof WP_REST_Response ? $d : new WP_REST_Response( $d ); }
 function add_action( $h, $c ) {}
 function add_filter( $h, $c ) {}
+function add_shortcode( $t, $c ) {}
+function shortcode_atts( $pairs, $atts, $shortcode = '' ) {
+	$atts = is_array( $atts ) ? $atts : array();
+	$out = array();
+	foreach ( $pairs as $name => $default ) {
+		$out[ $name ] = array_key_exists( $name, $atts ) ? $atts[ $name ] : $default;
+	}
+	return $out;
+}
+function register_activation_hook( $f, $c ) {}
+function register_deactivation_hook( $f, $c ) {}
+function register_uninstall_hook( $f, $c ) {}
+function plugins_loaded() {}
+function plugin_dir_path( $file ) { return rtrim( dirname( $file ), '/\\' ) . '/'; }
+function plugin_dir_url( $file ) { return ''; }
 $GLOBALS['wpdb'] = new class {
 	public $prefix = 'wp_';
 	public $insert_id = 42;
