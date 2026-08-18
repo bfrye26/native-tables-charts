@@ -72,3 +72,10 @@
 /* 2.0.3 container-aware editor sizing */
 @container (max-width:780px){.ntc-chart-workspace-header{grid-template-columns:1fr auto}.ntc-chart-workspace-heading{grid-column:1/-1}.ntc-chart-workspace-actions{justify-content:flex-end}.ntc-chart-workspace-body{padding:10px}.ntc-chart-mode-switch .components-button{padding-inline:8px}.ntc-table-workspace-header .ntc-chart-workspace-actions{grid-column:1/-1;justify-content:flex-start}}
 @container (max-width:520px){.ntc-chart-workspace-header{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:12px}.ntc-chart-workspace-heading{width:100%}.ntc-chart-mode-switch{width:100%}.ntc-chart-mode-switch .components-button{flex:1;min-width:0;min-height:40px;justify-content:center;padding-inline:6px}.ntc-chart-workspace-actions{width:100%;flex-wrap:wrap;justify-content:flex-start}.ntc-device-switch{flex:1 1 220px}.ntc-device-button{flex:1;min-width:0;height:40px;padding-inline:6px}.ntc-chart-workspace-actions>.components-button{min-height:40px}.ntc-chart-health{align-self:flex-start}.ntc-chart-workspace-body{padding:8px}}
+
+/* Keep virtual-grid header tracks aligned with their body cells. */
+.ntc-grid-corner,.ntc-grid-rownum,.ntc-grid-colhead,.ntc-grid-cell{box-sizing:border-box}
+.ntc-grid-cell{margin:0!important}
+
+/* Let a table preview use the same visible width as a sibling chart. */
+.ntc-table-workspace .ntc-chart-workspace-body.is-preview{padding-inline:0}
