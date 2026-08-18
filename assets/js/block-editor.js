@@ -841,10 +841,10 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
   const workspaceBody=editorMode==='preview'?renderPreview(false):editorMode==='split'&&type==='chart'?h('div',{className:'ntc-split-layout'},renderDataWorkspace(false),renderPreview(false)):renderDataWorkspace(false);
   const workspace=type==='chart'?h('div',{className:'ntc-chart-workspace'},
     h(ChartWorkspaceHeader,{config:chartConfig,rowCount:rows.length,metricCount,dataKind,editorMode,onModeChange:setEditorMode,previewMode,onPreviewModeChange:setPreviewMode,onEditStyle:()=>setStyleOpen(true),issues:chartIssues}),
-    h('div',{className:'ntc-chart-workspace-body'},workspaceBody)
+    h('div',{className:'ntc-chart-workspace-body'+(editorMode==='preview'?' is-preview':'')},workspaceBody)
   ):h('div',{className:'ntc-chart-workspace ntc-table-workspace'},
     h(TableWorkspaceHeader,{rowCount:rows.length,columnCount:columns.length,dataKind,editorMode,onModeChange:setEditorMode,previewMode,onPreviewModeChange:setPreviewMode,onEditStyle:()=>setStyleOpen(true)}),
-    h('div',{className:'ntc-chart-workspace-body'},workspaceBody)
+    h('div',{className:'ntc-chart-workspace-body'+(editorMode==='preview'?' is-preview':'')},workspaceBody)
   );
 
   if(!isSelected)return h('div',blockProps,renderPreview(true));

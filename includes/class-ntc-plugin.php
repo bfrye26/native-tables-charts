@@ -82,15 +82,17 @@ final class NTC_Plugin {
 	}
 
 	public function register_frontend_assets(): void {
-		wp_register_script( 'ntc-frontend', NTC_URL . 'assets/js/frontend.js', array(), NTC_VERSION, true );
+		$frontend_script_version = NTC_VERSION . '.' . filemtime( NTC_DIR . 'assets/js/frontend.js' );
+		wp_register_script( 'ntc-frontend', NTC_URL . 'assets/js/frontend.js', array(), $frontend_script_version, true );
 	}
 
 	public function register_assets_and_blocks(): void {
-		$editor_script_version = NTC_VERSION . '.' . filemtime( NTC_DIR . 'assets/js/block-editor.js' );
-		$editor_style_version  = NTC_VERSION . '.' . filemtime( NTC_DIR . 'assets/css/editor.css' );
+		$editor_script_version   = NTC_VERSION . '.' . filemtime( NTC_DIR . 'assets/js/block-editor.js' );
+		$editor_style_version    = NTC_VERSION . '.' . filemtime( NTC_DIR . 'assets/css/editor.css' );
+		$frontend_style_version  = NTC_VERSION . '.' . filemtime( NTC_DIR . 'assets/css/frontend.css' );
 		wp_register_script( 'ntc-block-editor', NTC_URL . 'assets/js/block-editor.js', array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-block-editor', 'wp-i18n', 'wp-api-fetch', 'wp-data', 'wp-server-side-render', 'wp-notices' ), $editor_script_version, true );
 		wp_register_style( 'ntc-block-editor-style', NTC_URL . 'assets/css/editor.css', array( 'wp-edit-blocks' ), $editor_style_version );
-		wp_register_style( 'ntc-frontend-style', NTC_URL . 'assets/css/frontend.css', array(), NTC_VERSION );
+		wp_register_style( 'ntc-frontend-style', NTC_URL . 'assets/css/frontend.css', array(), $frontend_style_version );
 		wp_set_script_translations( 'ntc-block-editor', 'native-tables-charts' );
 		wp_add_inline_script(
 			'ntc-block-editor',
