@@ -456,6 +456,92 @@ $gauge_chart = $call(
 	)
 );
 $assert( false !== strpos( $gauge_chart, 'ntc-gauge' ), 'render_chart dispatches gauge type' );
+$change = $call(
+	'chart_change',
+	array( array( 'A', '120', '100' ), array( 'B', '90', '100' ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1, 2 ),
+	)
+);
+$assert( false !== strpos( $change, 'ntc-change-bar is-up' ), 'change bars render up delta' );
+$assert( false !== strpos( $change, 'ntc-change-bar is-down' ), 'change bars render down delta' );
+$dumbbell = $call(
+	'chart_dumbbell',
+	array( array( 'A', '10', '30' ), array( 'B', '5', '8' ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1, 2 ),
+	)
+);
+$assert( 4 === substr_count( $dumbbell, 'ntc-dumbbell-dot' ), 'dumbbell renders 2 dots per row' );
+$assert( false !== strpos( $dumbbell, '10 – 30' ) && false !== strpos( $dumbbell, '5 – 8' ), 'dumbbell renders value labels' );
+$change_chart = $call(
+	'render_chart',
+	array(
+		'columns' => array(
+			array(
+				'id'    => 'c1',
+				'label' => 'A',
+				'type'  => 'text',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c2',
+				'label' => 'Now',
+				'type'  => 'number',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c3',
+				'label' => 'Prev',
+				'type'  => 'number',
+				'unit'  => '',
+			),
+		),
+		'rows'    => array( array( 'A', 120, 100 ), array( 'B', 90, 100 ) ),
+		'config'  => array(
+			'chartType'    => 'change',
+			'labelColumn'  => 0,
+			'valueColumns' => array( 1, 2 ),
+		),
+	)
+);
+$assert( false !== strpos( $change_chart, 'ntc-change' ), 'render_chart dispatches change type' );
+$dumbbell_chart = $call(
+	'render_chart',
+	array(
+		'columns' => array(
+			array(
+				'id'    => 'c1',
+				'label' => 'A',
+				'type'  => 'text',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c2',
+				'label' => 'Now',
+				'type'  => 'number',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c3',
+				'label' => 'Prev',
+				'type'  => 'number',
+				'unit'  => '',
+			),
+		),
+		'rows'    => array( array( 'A', 10, 30 ), array( 'B', 5, 8 ) ),
+		'config'  => array(
+			'chartType'    => 'dumbbell',
+			'labelColumn'  => 0,
+			'valueColumns' => array( 1, 2 ),
+		),
+	)
+);
+$assert( false !== strpos( $dumbbell_chart, 'ntc-dumbbells' ), 'render_chart dispatches dumbbell type' );
 $reg = new ReflectionMethod( 'NTC_Plugin', 'register_assets_and_blocks' );
 $reg->invoke( $ntc );
 $assert( isset( $GLOBALS['pattern_slug'] ) && 'ntc/review-card' === $GLOBALS['pattern_slug'], 'review-card pattern registered via register_assets_and_blocks' );

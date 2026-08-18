@@ -1295,6 +1295,12 @@ final class NTC_Renderer {
 			case 'gauge':
 				$out .= $this->chart_gauge( $chart_rows, $columns, $config );
 				break;
+			case 'change':
+				$out .= $this->chart_change( $chart_rows, $columns, $config );
+				break;
+			case 'dumbbell':
+				$out .= $this->chart_dumbbell( $chart_rows, $columns, $config );
+				break;
 			case 'horizontal-bar':
 			default:
 				$out .= $this->chart_horizontal( $chart_rows, $columns, $config );
@@ -1506,6 +1512,55 @@ final class NTC_Renderer {
 				$out .= '<div class="ntc-vbar-value" aria-hidden="true"></div>';
 			}
 			$out .= '<div class="ntc-vbar-track"><span class="ntc-vbar-fill" style="height:' . esc_attr( $pct ) . '%"></span></div><div class="ntc-vbar-label">' . esc_html( $label ) . '</div></div>';
+		}return $out . '</div>';
+	}
+
+	private function chart_change( array $rows, array $columns, array $c ): string {
+		$l    = absint( $c['labelColumn'] );
+		$vals = array_slice( array_map( 'absint', (array) $c['valueColumns'] ), 0, 2 );
+		if ( count( $vals ) < 2 ) {
+			$vals = array( $vals[0] ?? 1, 2 );
+		}$max = 1.0;
+		foreach ( $rows as $r ) {
+			$max = max( $max, abs( NTC_Formulas::numeric( $r[ $vals[0] ] ?? 0 ) - NTC_Formulas::numeric( $r[ $vals[1] ] ?? 0 ) ) );
+		}$out = '<div class="ntc-change">';
+		foreach ( $rows as $r ) {
+			$label = (string) ( $r[ $l ] ?? '' );
+			$cur   = NTC_Formulas::numeric( $r[ $vals[0] ] ?? 0 );
+			$prev  = NTC_Formulas::numeric( $r[ $vals[1] ] ?? 0 );
+			$delta = $cur - $prev;
+			$hl    = $this->is_highlight( $label, $c );
+			$side  = $delta >= 0 ? 'is-up' : 'is-down';
+			$half  = ( $delta / ( 2 * $max ) ) * 100;
+			$left  = $delta >= 0 ? 50 : 50 + $half;
+			$width = abs( $half );
+			$glyph = $delta > 0 ? '▲' : ( $delta < 0 ? '▼' : '—' );
+			$out  .= '<div class="ntc-change-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $label . ': ' . $glyph . ' ' . $this->format_value( $delta, $c, $columns[ $vals[0] ] ?? array() ) ) . '">';
+			$out  .= '<div class="ntc-change-label">' . esc_html( $label ) . '</div><div class="ntc-change-track"><span class="ntc-change-zero"></span><span class="ntc-change-bar ' . $side . '" style="left:' . esc_attr( (string) $left ) . '%;width:' . esc_attr( (string) $width ) . '%"></span></div>';
+			$out  .= '<div class="ntc-change-value ' . $side . '">' . esc_html( $glyph . ' ' . $this->format_value( $delta, $c, $columns[ $vals[0] ] ?? array() ) ) . '</div></div>';
+		}return $out . '</div>';
+	}
+
+	private function chart_dumbbell( array $rows, array $columns, array $c ): string {
+		$l    = absint( $c['labelColumn'] );
+		$vals = array_slice( array_map( 'absint', (array) $c['valueColumns'] ), 0, 2 );
+		if ( count( $vals ) < 2 ) {
+			$vals = array( $vals[0] ?? 1, 2 );
+		}$max = 1.0;
+		foreach ( $rows as $r ) {
+			$max = max( $max, $this->max_for( array( $r ), $vals[0] ), $this->max_for( array( $r ), $vals[1] ) );
+		}$out = '<div class="ntc-dumbbells">';
+		foreach ( $rows as $r ) {
+			$label  = (string) ( $r[ $l ] ?? '' );
+			$a      = NTC_Formulas::numeric( $r[ $vals[0] ] ?? 0 );
+			$b      = NTC_Formulas::numeric( $r[ $vals[1] ] ?? 0 );
+			$hl     = $this->is_highlight( $label, $c );
+			$lo     = min( $a, $b );
+			$hi     = max( $a, $b );
+			$lo_pct = ( $lo / $max ) * 100;
+			$hi_pct = ( $hi / $max ) * 100;
+			$out   .= '<div class="ntc-dumbbell-row' . ( $hl ? ' is-highlight' : '' ) . '"><div class="ntc-dumbbell-label">' . esc_html( $label ) . '</div><div class="ntc-dumbbell-track"><span class="ntc-dumbbell-line" style="left:' . esc_attr( (string) $lo_pct ) . '%;width:' . esc_attr( (string) ( $hi_pct - $lo_pct ) ) . '%"></span><span class="ntc-dumbbell-dot" style="left:' . esc_attr( (string) $lo_pct ) . '%"></span><span class="ntc-dumbbell-dot" style="left:' . esc_attr( (string) $hi_pct ) . '%"></span></div>';
+			$out   .= '<div class="ntc-dumbbell-values">' . esc_html( $this->format_value( $lo, $c, $columns[ $vals[0] ] ?? array() ) . ' – ' . $this->format_value( $hi, $c, $columns[ $vals[1] ] ?? array() ) ) . '</div></div>';
 		}return $out . '</div>';
 	}
 
