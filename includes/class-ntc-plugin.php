@@ -110,6 +110,15 @@ final class NTC_Plugin {
 		);
 		register_block_type( NTC_DIR . 'blocks/table', array( 'render_callback' => array( $this->renderer, 'render_table' ) ) );
 		register_block_type( NTC_DIR . 'blocks/chart', array( 'render_callback' => array( $this->renderer, 'render_chart' ) ) );
+		register_block_pattern(
+			'ntc/review-card',
+			array(
+				'title'       => __( 'Review Card (Native Tables & Charts)', 'native-tables-charts' ),
+				'description' => __( 'Gauge score, category radar chart and pros/cons table for reviews.', 'native-tables-charts' ),
+				'categories'  => array( 'ntc-data' ),
+				'content'     => '<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column {"width":"33%"} --><div class="wp-block-column" style="flex-basis:33%"><!-- wp:ntc/chart {"config":{"chartType":"gauge","title":"Score","labelColumn":0,"valueColumns":[1],"preset":"benchmark-dark","schemaType":"off"}} /--></div><!-- /wp:column --><!-- wp:column {"width":"67%"} --><div class="wp-block-column" style="flex-basis:67%"><!-- wp:ntc/chart {"config":{"chartType":"radar","title":"Category Scores","labelColumn":0,"valueColumns":[1],"preset":"benchmark-dark"}} /--></div><!-- /wp:column --></div><!-- /wp:columns --><!-- wp:ntc/table {"config":{"preset":"editorial","responsiveMode":"scroll"}} /-->',
+			)
+		);
 	}
 	public function invalidate_usage_cache(): void {
 		delete_transient( 'ntc_dataset_usage_counts' ); }

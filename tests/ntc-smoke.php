@@ -413,5 +413,8 @@ $gauge_chart = $call(
 	)
 );
 $assert( false !== strpos( $gauge_chart, 'ntc-gauge' ), 'render_chart dispatches gauge type' );
+$reg = new ReflectionMethod( 'NTC_Plugin', 'register_assets_and_blocks' );
+$reg->invoke( $ntc );
+$assert( isset( $GLOBALS['pattern_slug'] ) && 'ntc/review-card' === $GLOBALS['pattern_slug'], 'review-card pattern registered via register_assets_and_blocks' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

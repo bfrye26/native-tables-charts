@@ -61,6 +61,19 @@ function get_block_wrapper_attributes( $a = array() ) {
 	} return $o; }
 function wp_enqueue_script( $h ) {
 	$GLOBALS['enqueued'][] = $h; }
+function wp_register_script( $h, $s, $d = array(), $v = false, $f = false ) {}
+function wp_register_style( $h, $s, $d = array(), $v = false, $m = 'all' ) {}
+function wp_add_inline_script( $h, $d, $p = 'after' ) {}
+function wp_set_script_translations( $h, $d = null, $p = '' ) {}
+function rest_url( $p = '' ) {
+	return 'https://example.com/wp-json/' . ltrim( $p, '/' ); }
+function wp_create_nonce( $a = -1 ) {
+	return 'nonce'; }
+function register_block_type( $n, $a = array() ) {
+	$GLOBALS['block_types'][] = $n; }
+function register_block_pattern( $s, $p ) {
+	$GLOBALS['pattern_slug']  = $s;
+	$GLOBALS['pattern_props'] = $p; }
 function wp_kses_post( $v ) {
 	return (string) $v; }
 function wp_kses( $v, $a = array(), $p = array() ) {
