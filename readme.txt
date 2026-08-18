@@ -184,7 +184,7 @@ Not by default. Tables & Charts > Settings contains an explicit option to delete
 
 = 2.0.0 =
 * Major chart expansion: tooltips, date/time x-axis, area, radar, gauge, change, dumbbell, small multiples and heatmap chart types.
-* Analysis features: reference lines, top-N with "Others", conditional series colour rules, legend toggles, annotations, and a range brush for line/area charts.
+* Analysis features: reference lines, top-N with "Others", conditional series colour rules, legend toggles, annotations, and a range brush for line charts.
 * Review workflow: Review Card block pattern and schema.org Review/aggregateRating structured data.
 * Data depth: post-driven datasets (live charts from post meta) with caching.
 * Conditional series colour rules on multi-row line and area charts colour the whole stroke by the first point's value.

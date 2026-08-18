@@ -445,7 +445,7 @@ This build environment does not contain a complete running WordPress installatio
 Version 2.0.0 delivers the advanced chart expansion planned after 1.1.1 in four phases:
 
 - **Major chart expansion** — tooltips, date/time x-axis, area, radar, gauge, change, dumbbell, small multiples and heatmap chart types.
-- **Analysis features** — reference lines, top-N with "Others", conditional series colour rules, legend toggles, annotations, and a range brush for line/area charts.
+- **Analysis features** — reference lines, top-N with "Others", conditional series colour rules, legend toggles, annotations, and a range brush for line charts.
 - **Review workflow** — Review Card block pattern and schema.org Review/aggregateRating structured data.
 - **Data depth** — post-driven datasets (live charts from post meta) with caching.
 

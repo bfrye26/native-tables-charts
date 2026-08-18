@@ -1610,16 +1610,19 @@ final class NTC_Renderer {
 			$max = max( $max, $this->max_for( array( $r ), $vals[0] ), $this->max_for( array( $r ), $vals[1] ) );
 		}$out = '<div class="ntc-dumbbells">';
 		foreach ( $rows as $r ) {
-			$label  = (string) ( $r[ $l ] ?? '' );
-			$a      = NTC_Formulas::numeric( $r[ $vals[0] ] ?? 0 );
-			$b      = NTC_Formulas::numeric( $r[ $vals[1] ] ?? 0 );
-			$hl     = $this->is_highlight( $label, $c );
-			$lo     = min( $a, $b );
-			$hi     = max( $a, $b );
-			$lo_pct = ( $lo / $max ) * 100;
-			$hi_pct = ( $hi / $max ) * 100;
-			$out   .= '<div class="ntc-dumbbell-row' . ( $hl ? ' is-highlight' : '' ) . '"><div class="ntc-dumbbell-label">' . esc_html( $label ) . '</div><div class="ntc-dumbbell-track"><span class="ntc-dumbbell-line" style="left:' . esc_attr( (string) $lo_pct ) . '%;width:' . esc_attr( (string) ( $hi_pct - $lo_pct ) ) . '%"></span><span class="ntc-dumbbell-dot" style="left:' . esc_attr( (string) $lo_pct ) . '%"></span><span class="ntc-dumbbell-dot" style="left:' . esc_attr( (string) $hi_pct ) . '%"></span></div>';
-			$out   .= '<div class="ntc-dumbbell-values">' . esc_html( $this->format_value( $lo, $c, $columns[ $vals[0] ] ?? array() ) . ' – ' . $this->format_value( $hi, $c, $columns[ $vals[1] ] ?? array() ) ) . '</div></div>';
+			$label   = (string) ( $r[ $l ] ?? '' );
+			$a       = NTC_Formulas::numeric( $r[ $vals[0] ] ?? 0 );
+			$b       = NTC_Formulas::numeric( $r[ $vals[1] ] ?? 0 );
+			$hl      = $this->is_highlight( $label, $c );
+			$lo      = min( $a, $b );
+			$hi      = max( $a, $b );
+			$is_lo_a = $a <= $b;
+			$lo_col  = $is_lo_a ? ( $columns[ $vals[0] ] ?? array() ) : ( $columns[ $vals[1] ] ?? array() );
+			$hi_col  = $is_lo_a ? ( $columns[ $vals[1] ] ?? array() ) : ( $columns[ $vals[0] ] ?? array() );
+			$lo_pct  = ( $lo / $max ) * 100;
+			$hi_pct  = ( $hi / $max ) * 100;
+			$out    .= '<div class="ntc-dumbbell-row' . ( $hl ? ' is-highlight' : '' ) . '"><div class="ntc-dumbbell-label">' . esc_html( $label ) . '</div><div class="ntc-dumbbell-track"><span class="ntc-dumbbell-line" style="left:' . esc_attr( (string) $lo_pct ) . '%;width:' . esc_attr( (string) ( $hi_pct - $lo_pct ) ) . '%"></span><span class="ntc-dumbbell-dot" style="left:' . esc_attr( (string) $lo_pct ) . '%"></span><span class="ntc-dumbbell-dot" style="left:' . esc_attr( (string) $hi_pct ) . '%"></span></div>';
+			$out    .= '<div class="ntc-dumbbell-values">' . esc_html( $this->format_value( $lo, $c, $lo_col ) . ' – ' . $this->format_value( $hi, $c, $hi_col ) ) . '</div></div>';
 		}return $out . '</div>';
 	}
 
@@ -1687,13 +1690,13 @@ final class NTC_Renderer {
 				}foreach ( $vals as $si => $v ) {
 					$val  = max( 0, NTC_Formulas::numeric( $r[ $v ] ?? 0 ) );
 					$pct  = $sum ? ( $val / $sum ) * 100 : 0;
-					$out .= '<span class="ntc-stack-seg" style="width:' . esc_attr( $pct ) . '%;background:' . esc_attr( $this->series_color( $val, $v, $c, $colors[ $si % count( $colors ) ] ) ) . '" title="' . esc_attr( ( $columns[ $v ]['label'] ?? '' ) . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '"></span>';
+					$out .= '<span class="ntc-stack-seg" data-series="' . ( $si % 6 ) . '" style="width:' . esc_attr( $pct ) . '%;background:' . esc_attr( $this->series_color( $val, $v, $c, $colors[ $si % count( $colors ) ] ) ) . '" title="' . esc_attr( ( $columns[ $v ]['label'] ?? '' ) . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '"></span>';
 				}
 			} else {
 				foreach ( $vals as $si => $v ) {
 						$val  = NTC_Formulas::numeric( $r[ $v ] ?? 0 );
 						$pct  = max( 0, min( 100, ( $val / $max ) * 100 ) );
-						$out .= '<div class="ntc-group-bar"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><span style="width:' . esc_attr( $pct ) . '%;background:' . esc_attr( $this->series_color( $val, $v, $c, $colors[ $si % count( $colors ) ] ) ) . '"></span>';
+						$out .= '<div class="ntc-group-bar" data-series="' . ( $si % 6 ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><span style="width:' . esc_attr( $pct ) . '%;background:' . esc_attr( $this->series_color( $val, $v, $c, $colors[ $si % count( $colors ) ] ) ) . '"></span>';
 					if ( $c['showValues'] ) {
 						$out .= '<em>' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</em>';
 					}$out .= '</div>';
@@ -1730,8 +1733,8 @@ final class NTC_Renderer {
 			foreach ( $rows as $r ) {
 				$xvals[] = (float) $this->sort_value( $r[ $xcol ] ?? '', $columns[ $xcol ]['type'] ?? 'auto', $columns[ $xcol ]['format'] ?? '', 'us' );
 			}
-			$xmin = min( $xvals );
-			$xmax = max( $xvals );
+			$xmin = $xvals ? min( $xvals ) : 0.0;
+			$xmax = $xvals ? max( $xvals ) : 1.0;
 			if ( $xmin === $xmax ) {
 				$xmax = $xmin + 1;
 			}
@@ -1776,7 +1779,7 @@ final class NTC_Renderer {
 			if ( ! $scatter ) {
 				if ( ! empty( $c['enableBrush'] ) && ! $area ) {
 					$out .= '<polyline data-series="' . $si . '" data-points="' . esc_attr( wp_json_encode( array_map( fn( $p ) => array( $p[4], $p[3] ), $pts ) ) ) . '" points="' . $poly . '" class="' . $line_class . '" style="stroke:' . $colors[ $si % count( $colors ) ] . '" fill="none"/>';
-				} else {
+				} elseif ( $pts ) {
 					$out .= '<polyline points="' . $poly . '" class="' . $line_class . '" style="stroke:' . $this->series_color( $pts[0][3], $v, $c, $colors[ $si % count( $colors ) ] ) . '" fill="none"/>';
 				}
 			}
@@ -1784,7 +1787,7 @@ final class NTC_Renderer {
 				$out .= '<polygon points="' . round( $pts[0][0], 1 ) . ',' . ( $pad_t + $ph ) . ' ' . $poly . ' ' . round( $pts[ count( $pts ) - 1 ][0], 1 ) . ',' . ( $pad_t + $ph ) . '" class="ntc-svg-area-fill ntc-series-' . ( $si % 6 ) . '" style="fill:' . $colors[ $si % count( $colors ) ] . ';opacity:.18"/>';
 			}
 			foreach ( $pts as $p ) {
-				$tip  = ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $p[2], $p[3], $columns[ $v ] ?? array(), $c ) . '"' : '';
+				$tip  = ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2], $p[3], $columns[ $v ] ?? array(), $c ) . '"' : '';
 				$data = ( ! empty( $c['enableBrush'] ) && ! $scatter && ! $area ) ? ' data-x="' . $p[4] . '" data-v="' . $p[3] . '"' : '';
 				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point ntc-series-' . ( $si % 6 ) . '" style="fill:' . $this->series_color( $p[3], $v, $c, $colors[ $si % count( $colors ) ] ) . '"' . $tip . $data . '><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
 			}

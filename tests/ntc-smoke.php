@@ -416,6 +416,71 @@ $line_brush = $call(
 $assert( false !== strpos( $line_brush, 'data-pad-l="70"' ) && false !== strpos( $line_brush, 'data-w="1000"' ) && false !== strpos( $line_brush, 'data-h="440"' ), 'chart_line brush svg carries pad and size data attributes' );
 $assert( false !== strpos( $line_brush, 'data-series="0"' ) && false !== strpos( $line_brush, 'data-points="[[0,5],[1,10]]"' ), 'chart_line brush polyline carries series and raw point data' );
 $assert( false !== strpos( $line_brush, 'data-x="0"' ) && false !== strpos( $line_brush, 'data-v="5"' ), 'chart_line brush circles carry data-x and data-v' );
+preg_match( '/data-points="([^"]*)"/', $line_brush, $m_points );
+$assert( isset( $m_points[1] ) && is_array( json_decode( $m_points[1], true ) ), 'chart_line brush data-points is valid JSON' );
+$line_empty_xcol = $call(
+	'chart_line',
+	array(),
+	array( 0 => array( 'type' => 'number' ) ),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'xColumn'      => 0,
+	),
+	false,
+	false
+);
+$assert( false !== strpos( $line_empty_xcol, '<svg' ), 'chart_line empty rows with xColumn does not fatal' );
+$tip_prefix = $call(
+	'chart_line',
+	array( array( 'A', 5 ), array( 'B', 10 ) ),
+	array(
+		1 => array(
+			'label' => 'Score',
+			'type'  => 'number',
+			'unit'  => 'fps',
+		),
+	),
+	array(
+		'labelColumn'    => 0,
+		'valueColumns'   => array( 1 ),
+		'xColumn'        => null,
+		'enableTooltips' => true,
+	),
+	false,
+	false
+);
+$assert( false !== strpos( $tip_prefix, 'data-tip="Score, A: 5 fps"' ), 'chart_line tooltip carries series column label prefix' );
+$grouped_stacked = $call(
+	'chart_grouped',
+	array( array( 'A', '30', '70' ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1, 2 ),
+	),
+	true
+);
+$assert( false !== strpos( $grouped_stacked, 'data-series="0"' ), 'chart_grouped stacked segments carry data-series attributes' );
+$dumbbell_units = $call(
+	'chart_dumbbell',
+	array( array( 'A', '10', '20' ) ),
+	array(
+		1 => array(
+			'label' => 'X',
+			'unit'  => 'u1',
+		),
+		2 => array(
+			'label' => 'Y',
+			'unit'  => 'u2',
+		),
+	),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1, 2 ),
+	)
+);
+$assert( false !== strpos( $dumbbell_units, '10 u1' ) && false !== strpos( $dumbbell_units, '20 u2' ), 'dumbbell lo/hi labels use their source column units' );
 $scatter_brush = $call(
 	'chart_line',
 	array( array( 'A', 5 ), array( 'B', 10 ) ),

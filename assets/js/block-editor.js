@@ -462,7 +462,7 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
   h(PanelBody,{title:__('Interactivity','native-tables-charts'),initialOpen:false},
     h(ToggleControl,{label:__('Enable tooltips','native-tables-charts'),checked:config.enableTooltips!==false,onChange:v=>patch({enableTooltips:v})}),
     h(ToggleControl,{label:__('Legend toggles','native-tables-charts'),checked:!!config.legendToggles,onChange:v=>patch({legendToggles:v})}),
-    (config.chartType==='line'||config.chartType==='area')&&h(ToggleControl,{label:__('Enable brush selection','native-tables-charts'),checked:!!config.enableBrush,onChange:v=>patch({enableBrush:v})})
+    config.chartType==='line'&&h(ToggleControl,{label:__('Enable brush selection','native-tables-charts'),checked:!!config.enableBrush,onChange:v=>patch({enableBrush:v})})
   ),
   h(PanelBody,{title:__('Data','native-tables-charts'),initialOpen:true},
     h('p',{className:'ntc-inspector-note'},(attributes.rows||[]).length+' '+(((attributes.rows||[]).length===1)?__('row','native-tables-charts'):__('rows','native-tables-charts'))+' • '+Math.max(1,values.length)+' '+(Math.max(1,values.length)===1?__('metric','native-tables-charts'):__('metrics','native-tables-charts'))),
