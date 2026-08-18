@@ -130,6 +130,8 @@ final class NTC_Renderer {
 			'sortLabel'               => '',
 			'labelColumn'             => 0,
 			'valueColumns'            => array( 1 ),
+			'topN'                    => 0,
+			'othersLabel'             => 'Others',
 			'xColumn'                 => null,
 			'sortColumn'              => 1,
 			'sortDirection'           => 'desc',
@@ -1279,6 +1281,29 @@ final class NTC_Renderer {
 					return 'desc' === $dir ? -$cmp : $cmp;
 				}
 			);}
+		$top = max( 0, (int) ( $c['topN'] ?? 0 ) );
+		if ( $top > 0 && count( $rows ) > $top ) {
+			$kept  = array_slice( $rows, 0, $top );
+			$rest  = array_slice( $rows, $top );
+			$label = (string) ( $c['othersLabel'] ?? 'Others' );
+			if ( $rest && $kept ) {
+				$l   = absint( $c['labelColumn'] );
+				$agg = array();
+				foreach ( $kept[0] as $ci => $ignored ) {
+					$agg[ $ci ] = '';
+				}
+				$agg[ $l ] = $label;
+				foreach ( array_map( 'absint', (array) $c['valueColumns'] ) as $v ) {
+					$sum = 0.0;
+					foreach ( $rest as $r ) {
+						$sum += NTC_Formulas::numeric( $r[ $v ] ?? 0 );
+					}
+					$agg[ $v ] = (string) $sum;
+				}
+				$kept[] = $agg;
+			}
+			$rows = $kept;
+		}
 		return $rows;
 	}
 

@@ -134,6 +134,27 @@ $assert(
 	),
 	'ref_lines skips value above max'
 );
+$topn = $call(
+	'prepare_chart_rows',
+	array(
+		array( 'A', 10 ),
+		array( 'B', 20 ),
+		array( 'C', 30 ),
+		array( 'D', 40 ),
+		array( 'E', 50 ),
+	),
+	array(),
+	array(
+		'topN'          => 3,
+		'labelColumn'   => 0,
+		'valueColumns'  => array( 1 ),
+		'sortColumn'    => 1,
+		'sortDirection' => 'asc',
+	)
+);
+$assert( 4 === count( $topn ), 'topN rolls rest into Others row' );
+$assert( 'Others' === $topn[3][0], 'Others row label' );
+$assert( '90' === (string) $topn[3][1], 'Others row value sums rest' );
 $heat_cfg = array(
 	'autoColorRules' => array(
 		array(
