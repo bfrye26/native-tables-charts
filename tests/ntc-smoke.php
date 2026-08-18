@@ -124,6 +124,20 @@ $xss_review = $call(
 	array( array( 'X', 5 ) )
 );
 $assert( false === strpos( $xss_review, '<script>alert' ), 'review schema escapes malicious title script tag' );
+$clamp_schema = $call(
+	'schema_json',
+	array(),
+	array(
+		'schemaType'   => 'review',
+		'title'        => 'Game X',
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'ratingMax'    => 10,
+	),
+	array(),
+	array( array( 'X', '12.5' ) )
+);
+$assert( false !== strpos( $clamp_schema, '"ratingValue":10' ) && false !== strpos( $clamp_schema, '"bestRating":10' ), 'review schema clamps ratingValue to bestRating' );
 $assert( '' === $call( 'schema_json', array(), array( 'schemaType' => 'off' ), array() ), 'schemaType off returns empty' );
 $updated = $call( 'updated_date_html', array( 'showUpdatedDate' => true ), array( 'dataset_updated_at' => '2026-08-17 10:00:00' ) );
 $assert( false !== strpos( $updated, 'Last updated:' ), 'updated date renders Last updated line' );
