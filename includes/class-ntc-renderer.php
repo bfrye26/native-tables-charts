@@ -138,6 +138,7 @@ final class NTC_Renderer {
 			'highlightValues'         => array(),
 			'allowMultipleHighlights' => false,
 			'referenceLines'          => array(),
+			'annotations'             => array(),
 			'seriesRules'             => array(),
 			'radarMax'                => 0,
 			'gaugeMin'                => 0,
@@ -1725,6 +1726,40 @@ final class NTC_Renderer {
 			}
 		}
 		$out .= $this->svg_ref_lines( $min, $max, $pad_l, $pad_r, $pad_t, $ph, $c );
+		if ( ! empty( $c['annotations'] ) && null !== $xcol && $ticks ) {
+			$xmap = array();
+			foreach ( $rows as $i => $r ) {
+				$xv                                  = (float) $this->sort_value( $r[ $xcol ] ?? '', $columns[ $xcol ]['type'] ?? 'auto', $columns[ $xcol ]['format'] ?? '', 'us' );
+				$xmap[ (string) ( $r[ $l ] ?? '' ) ] = $px( $xv );
+				$xmap[ '#' . $i ]                    = $px( $xv );
+			}
+			foreach ( array_slice( (array) $c['annotations'], 0, 5 ) as $an ) {
+				$color = self::safe_css_value( $an['color'] ?? '#f59e0b' );
+				$text  = (string) ( $an['label'] ?? '' );
+				if ( 'marker' === ( $an['type'] ?? '' ) ) {
+					$at = (string) ( $an['at'] ?? '' );
+					if ( ! isset( $xmap[ $at ] ) ) {
+						continue;
+					}
+					$out .= '<line x1="' . round( $xmap[ $at ], 1 ) . '" y1="' . $pad_t . '" x2="' . round( $xmap[ $at ], 1 ) . '" y2="' . ( $pad_t + $ph ) . '" class="ntc-svg-annotation" style="stroke:' . esc_attr( $color ) . '"/>';
+					if ( '' !== $text ) {
+						$out .= '<text x="' . round( $xmap[ $at ], 1 ) . '" y="' . ( $pad_t - 6 ) . '" class="ntc-svg-ref-label" text-anchor="middle">' . esc_html( $text ) . '</text>';
+					}
+				} elseif ( 'region' === ( $an['type'] ?? '' ) ) {
+					$from = (string) ( $an['from'] ?? '' );
+					$to   = (string) ( $an['to'] ?? '' );
+					if ( ! isset( $xmap[ $from ] ) || ! isset( $xmap[ $to ] ) ) {
+						continue;
+					}
+					$x1   = min( $xmap[ $from ], $xmap[ $to ] );
+					$x2   = max( $xmap[ $from ], $xmap[ $to ] );
+					$out .= '<rect x="' . round( $x1, 1 ) . '" y="' . $pad_t . '" width="' . max( 1, round( $x2 - $x1, 1 ) ) . '" height="' . $ph . '" class="ntc-svg-region" style="fill:' . esc_attr( $color ) . '"/>';
+					if ( '' !== $text ) {
+						$out .= '<text x="' . round( ( $x1 + $x2 ) / 2, 1 ) . '" y="' . ( $pad_t - 6 ) . '" class="ntc-svg-ref-label" text-anchor="middle">' . esc_html( $text ) . '</text>';
+					}
+				}
+			}
+		}
 		return $out . '</svg>';
 	}
 
