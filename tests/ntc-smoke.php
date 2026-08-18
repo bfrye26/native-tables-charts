@@ -384,6 +384,86 @@ $radar_two_rows = $call(
 $assert( false !== strpos( $radar_two_rows, 'ntc-chart-empty-note' ), 'radar shows empty note under 3 rows' );
 $assert( 0 === NTC_Renderer::chart_defaults()['radarMax'], 'chart_defaults includes radarMax 0' );
 $assert( 0 === NTC_Renderer::chart_defaults()['gaugeMin'] && 100 === NTC_Renderer::chart_defaults()['gaugeMax'], 'chart_defaults includes gaugeMin 0 and gaugeMax 100' );
+$assert( array() === NTC_Renderer::chart_defaults()['seriesRules'], 'chart_defaults includes seriesRules' );
+$series_cfg = array(
+	'seriesRules' => array(
+		array(
+			'column' => 1,
+			'ranges' => array(
+				array(
+					'min'   => 50,
+					'max'   => 100,
+					'color' => '#00ff00',
+				),
+			),
+		),
+	),
+);
+$assert( '#00ff00' === $call( 'series_color', '75', 1, $series_cfg, '#fff' ), 'series_color matches range to color' );
+$assert( '#fff' === $call( 'series_color', 10, 1, $series_cfg, '#fff' ), 'series_color falls back outside range' );
+$empty_color_cfg = array(
+	'seriesRules' => array(
+		array(
+			'column' => 1,
+			'ranges' => array(
+				array(
+					'min'   => 50,
+					'max'   => 100,
+					'color' => '',
+				),
+			),
+		),
+	),
+);
+$assert( '#fff' === $call( 'series_color', '75', 1, $empty_color_cfg, '#fff' ), 'series_color empty color falls back' );
+$assert( '#fff' === $call( 'series_color', '75', 2, $series_cfg, '#fff' ), 'series_color non-matching column falls back' );
+$hbar_series = $call(
+	'chart_horizontal',
+	array( array( 'A', 75 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'showValues'   => true,
+		'seriesRules'  => array(
+			array(
+				'column' => 1,
+				'ranges' => array(
+					array(
+						'min'   => 50,
+						'max'   => 100,
+						'color' => '#00ff00',
+					),
+				),
+			),
+		),
+	)
+);
+$assert( false !== strpos( $hbar_series, 'background:#00ff00' ), 'chart_horizontal fill uses series rule color' );
+$hbar_highlight = $call(
+	'chart_horizontal',
+	array( array( 'A', 75 ) ),
+	array(),
+	array(
+		'labelColumn'     => 0,
+		'valueColumns'    => array( 1 ),
+		'showValues'      => true,
+		'highlightValues' => array( 'A' ),
+		'seriesRules'     => array(
+			array(
+				'column' => 1,
+				'ranges' => array(
+					array(
+						'min'   => 50,
+						'max'   => 100,
+						'color' => '#00ff00',
+					),
+				),
+			),
+		),
+	)
+);
+$assert( false === strpos( $hbar_highlight, 'background:#00ff00' ), 'highlighted row keeps class highlight color' );
 $gauge = $call(
 	'chart_gauge',
 	array( array( 'Score', 50 ) ),
