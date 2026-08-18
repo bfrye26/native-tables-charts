@@ -143,6 +143,7 @@ final class NTC_Renderer {
 			'radarMax'                => 0,
 			'gaugeMin'                => 0,
 			'gaugeMax'                => 100,
+			'multiplesPerRow'         => 3,
 			'unit'                    => '',
 			'decimals'                => 'auto',
 			'showValues'              => true,
@@ -1321,6 +1322,9 @@ final class NTC_Renderer {
 			case 'dumbbell':
 				$out .= $this->chart_dumbbell( $chart_rows, $columns, $config );
 				break;
+			case 'small-multiples':
+				$out .= $this->chart_small_multiples( $chart_rows, $columns, $config );
+				break;
 			case 'horizontal-bar':
 			default:
 				$out .= $this->chart_horizontal( $chart_rows, $columns, $config );
@@ -1610,6 +1614,49 @@ final class NTC_Renderer {
 			$out   .= '<div class="ntc-dumbbell-row' . ( $hl ? ' is-highlight' : '' ) . '"><div class="ntc-dumbbell-label">' . esc_html( $label ) . '</div><div class="ntc-dumbbell-track"><span class="ntc-dumbbell-line" style="left:' . esc_attr( (string) $lo_pct ) . '%;width:' . esc_attr( (string) ( $hi_pct - $lo_pct ) ) . '%"></span><span class="ntc-dumbbell-dot" style="left:' . esc_attr( (string) $lo_pct ) . '%"></span><span class="ntc-dumbbell-dot" style="left:' . esc_attr( (string) $hi_pct ) . '%"></span></div>';
 			$out   .= '<div class="ntc-dumbbell-values">' . esc_html( $this->format_value( $lo, $c, $columns[ $vals[0] ] ?? array() ) . ' – ' . $this->format_value( $hi, $c, $columns[ $vals[1] ] ?? array() ) ) . '</div></div>';
 		}return $out . '</div>';
+	}
+
+	private function chart_small_multiples( array $rows, array $columns, array $c ): string {
+		$l    = absint( $c['labelColumn'] );
+		$v    = absint( $c['valueColumns'][0] ?? 1 );
+		$per  = max( 1, min( 6, absint( $c['multiplesPerRow'] ?? 3 ) ) );
+		$w    = 96;
+		$h    = 28;
+		$pad  = 3;
+		$cell = function ( $values ) use ( $w, $h, $pad ) {
+			$nums = array_values( array_filter( $values, 'is_numeric' ) );
+			if ( count( $nums ) < 2 ) {
+				return '<svg viewBox="0 0 ' . $w . ' ' . $h . '" class="ntc-mini-svg"></svg>';
+			}
+			$min  = min( $nums );
+			$max  = max( $nums );
+			$span = ( $max - $min );
+			if ( ! $span ) {
+				$span = 1;
+			}
+			$n   = count( $nums );
+			$pts = array();
+			foreach ( $nums as $i => $nv ) {
+				$x     = $pad + ( $w - 2 * $pad ) * ( $i / ( $n - 1 ) );
+				$y     = $h - $pad - ( $h - 2 * $pad ) * ( ( $nv - $min ) / $span );
+				$pts[] = round( $x, 1 ) . ',' . round( $y, 1 );
+			}
+			return '<svg viewBox="0 0 ' . $w . ' ' . $h . '" class="ntc-mini-svg"><polyline points="' . esc_attr( implode( ' ', $pts ) ) . '" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+		};
+		$out  = '<div class="ntc-mini-grid" style="--ntc-mini-per:' . $per . '">';
+		foreach ( $rows as $r ) {
+			$raw    = (string) ( $r[ $v ] ?? '' );
+			$pieces = preg_split( '/[\s,]+/', trim( wp_strip_all_tags( $raw ) ), -1, PREG_SPLIT_NO_EMPTY );
+			$nums   = array();
+			foreach ( $pieces as $piece ) {
+				if ( is_numeric( $piece ) ) {
+					$nums[] = (float) $piece;
+				}
+			}
+			$hl   = $this->is_highlight( (string) ( $r[ $l ] ?? '' ), $c );
+			$out .= '<div class="ntc-mini-cell' . ( $hl ? ' is-highlight' : '' ) . '">' . $cell( $nums ) . '<span class="ntc-mini-label">' . esc_html( $this->truncate( (string) ( $r[ $l ] ?? '' ), 24 ) ) . '</span></div>';
+		}
+		return $out . '</div>';
 	}
 
 	private function chart_grouped( array $rows, array $columns, array $c, bool $stacked ): string {

@@ -88,3 +88,5 @@
 .ntc-hbar-row.ntc-series-0{background:none!important}
 
 .ntc-svg-annotation{stroke-dasharray:4 3;stroke-width:1.5}.ntc-svg-region{opacity:.15}
+
+.ntc-mini-grid{display:grid;grid-template-columns:repeat(var(--ntc-mini-per,3),minmax(0,1fr));gap:14px}.ntc-mini-cell{display:flex;flex-direction:column;gap:5px;align-items:center;color:var(--ntc-chart-text)}.ntc-mini-svg{display:block;width:100%;height:auto}.ntc-mini-label{font-size:var(--ntc-mobile-label-size,13px);color:var(--ntc-muted);text-align:center}.ntc-mini-cell.is-highlight .ntc-mini-label{color:var(--ntc-highlight);font-weight:700}.ntc-mini-cell.is-highlight .ntc-mini-svg{color:var(--ntc-highlight)}

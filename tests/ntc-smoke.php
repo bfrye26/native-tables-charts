@@ -711,6 +711,48 @@ $dumbbell_chart = $call(
 	)
 );
 $assert( false !== strpos( $dumbbell_chart, 'ntc-dumbbells' ), 'render_chart dispatches dumbbell type' );
+$assert( 3 === NTC_Renderer::chart_defaults()['multiplesPerRow'], 'chart_defaults includes multiplesPerRow 3' );
+$mini = $call(
+	'chart_small_multiples',
+	array( array( 'A', '10 20 30' ), array( 'B', '5,8' ), array( 'C', 'n/a' ) ),
+	array(),
+	array(
+		'labelColumn'     => 0,
+		'valueColumns'    => array( 1 ),
+		'highlightValues' => array( 'B' ),
+	)
+);
+$assert( 3 === substr_count( $mini, 'ntc-mini-cell' ), 'small multiples renders one cell per row' );
+$assert( 2 === substr_count( $mini, '<polyline' ), 'small multiples renders polyline for rows with 2+ numeric values' );
+$assert( false !== strpos( $mini, 'class="ntc-mini-svg"></svg>' ), 'small multiples renders empty svg for row under 2 values' );
+$assert( false !== strpos( $mini, 'ntc-mini-cell is-highlight' ), 'small multiples highlights matching row' );
+$assert( false !== strpos( $mini, '--ntc-mini-per:3' ), 'small multiples defaults to 3 per row' );
+$mini_chart = $call(
+	'render_chart',
+	array(
+		'columns' => array(
+			array(
+				'id'    => 'c1',
+				'label' => 'A',
+				'type'  => 'text',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c2',
+				'label' => 'Values',
+				'type'  => 'text',
+				'unit'  => '',
+			),
+		),
+		'rows'    => array( array( 'A', '10 20 30' ), array( 'B', '5,8' ) ),
+		'config'  => array(
+			'chartType'    => 'small-multiples',
+			'labelColumn'  => 0,
+			'valueColumns' => array( 1 ),
+		),
+	)
+);
+$assert( false !== strpos( $mini_chart, 'ntc-mini-grid' ), 'render_chart dispatches small-multiples type' );
 $GLOBALS['fake_wp_posts'] = array(
 	new WP_Post( 1, 'Post A' ),
 	new WP_Post( 2, 'Post B' ),
