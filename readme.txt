@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 1.1.1
+Stable tag: 2.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -181,6 +181,14 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 2.0.0 =
+* Major chart expansion: tooltips, date/time x-axis, area, radar, gauge, change, dumbbell, small multiples and heatmap chart types.
+* Analysis features: reference lines, top-N with "Others", conditional series colour rules, legend toggles, annotations, and a range brush for line/area charts.
+* Review workflow: Review Card block pattern and schema.org Review/aggregateRating structured data.
+* Data depth: post-driven datasets (live charts from post meta) with caching.
+* Conditional series colour rules on multi-row line and area charts colour the whole stroke by the first point's value.
+* Grouped and stacked bars no longer carry ntc-series-N classes; custom CSS targeting those classes must be updated.
 
 = 1.1.1 =
 * Replaced the dataset/view picker with a selectable list (select + confirm, double-click to pick immediately).

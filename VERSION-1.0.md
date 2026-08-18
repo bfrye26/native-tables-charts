@@ -440,6 +440,17 @@ This build environment does not contain a complete running WordPress installatio
 - The focus button now exposes `aria-pressed` for assistive technology.
 
 
+## 2.0.0 advanced chart roadmap
+
+Version 2.0.0 delivers the advanced chart expansion planned after 1.1.1 in four phases:
+
+- **Major chart expansion** — tooltips, date/time x-axis, area, radar, gauge, change, dumbbell, small multiples and heatmap chart types.
+- **Analysis features** — reference lines, top-N with "Others", conditional series colour rules, legend toggles, annotations, and a range brush for line/area charts.
+- **Review workflow** — Review Card block pattern and schema.org Review/aggregateRating structured data.
+- **Data depth** — post-driven datasets (live charts from post meta) with caching.
+
+Documented rendering semantics: conditional series colour rules on multi-row line and area charts colour the whole stroke by the first point's value, and grouped and stacked bars no longer carry `ntc-series-N` classes, so custom CSS targeting those classes must be updated.
+
 ## 1.1.1 picker list and migration batching
 
 - The dataset/view picker is now a selectable list: click to select, double-click or "Use selection" to confirm, with row counts shown beside dataset names.
