@@ -296,13 +296,15 @@ function DataImportModal({onClose,onImport}){
  const doImport=()=>{try{setError('');let result;if(format==='json'||(format==='auto'&&text.trim().startsWith('['))||(format==='auto'&&text.trim().startsWith('{')))result=parseJsonImport(text);else{const d=format==='tsv'?'\t':format==='csv'?',':(text.includes('\t')?'\t':',');result=parseDelimited(text,d,headers);}if(!result.columns.length)throw new Error(__('No usable data was found.','native-tables-charts'));onImport(result);onClose();}catch(e){setError(e&&e.message?e.message:__('Could not import the data.','native-tables-charts'));}};
  const onFile=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const ext=(f.name.split('.').pop()||'').toLowerCase();if(['csv','tsv','json'].includes(ext))setFormat(ext);const r=new FileReader();r.onload=()=>setText(String(r.result||''));r.readAsText(f);};
  return h(Modal,{title:__('Import or Paste Data','native-tables-charts'),onRequestClose:onClose,className:'ntc-import-modal'},
-  h('p',null,__('Paste from Excel or Google Sheets, or import CSV, TSV or JSON. Data stays inside WordPress.','native-tables-charts')),
-  h('input',{type:'file',accept:'.csv,.tsv,.txt,.json,text/csv,text/tab-separated-values,application/json',onChange:onFile}),
-  h(SelectControl,{label:__('Format','native-tables-charts'),value:format,options:[{label:__('Auto-detect','native-tables-charts'),value:'auto'},{label:'CSV',value:'csv'},{label:'TSV',value:'tsv'},{label:'JSON',value:'json'}],onChange:setFormat}),
-  h(TextareaControl,{label:__('Data','native-tables-charts'),value:text,onChange:setText,rows:10,className:'ntc-paste-area'}),
-  format!=='json'&&h(ToggleControl,{label:__('First row contains column headers','native-tables-charts'),checked:headers,onChange:setHeaders}),
+  h('p',{className:'ntc-modal-intro'},__('Paste from Excel or Google Sheets, or import CSV, TSV or JSON. Data stays inside WordPress.','native-tables-charts')),
+  h('div',{className:'ntc-import-fields'},
+   h('div',{className:'ntc-import-file'},h('label',{htmlFor:'ntc-import-file'},__('Choose a file','native-tables-charts')),h('input',{id:'ntc-import-file',type:'file',accept:'.csv,.tsv,.txt,.json,text/csv,text/tab-separated-values,application/json',onChange:onFile})),
+   h(SelectControl,{label:__('Format','native-tables-charts'),value:format,options:[{label:__('Auto-detect','native-tables-charts'),value:'auto'},{label:'CSV',value:'csv'},{label:'TSV',value:'tsv'},{label:'JSON',value:'json'}],onChange:setFormat}),
+   h(TextareaControl,{label:__('Data','native-tables-charts'),value:text,onChange:setText,rows:10,className:'ntc-paste-area'}),
+   format!=='json'&&h(ToggleControl,{label:__('First row contains column headers','native-tables-charts'),checked:headers,onChange:setHeaders})
+  ),
   error&&h(Notice,{status:'error',isDismissible:false},error),
-  h('div',{className:'ntc-inline-actions'},h(Button,{variant:'primary',onClick:doImport,disabled:!text.trim()},__('Import','native-tables-charts')),h(Button,{variant:'tertiary',onClick:onClose},__('Cancel','native-tables-charts')))
+  h('div',{className:'ntc-modal-actions'},h(Button,{variant:'tertiary',onClick:onClose},__('Cancel','native-tables-charts')),h(Button,{variant:'primary',onClick:doImport,disabled:!text.trim()},__('Import','native-tables-charts')))
  );
 }
 
@@ -321,25 +323,53 @@ function ExportModal({columns,rows,onClose,type}){
 }
 
 function DatasetPicker({onClose,onPick,type}){
- const [items,setItems]=useState(null);const [views,setViews]=useState(null);const [search,setSearch]=useState('');const [selected,setSelected]=useState(null);
- const load=()=>Promise.all([
-   apiFetch({path:'/ntc/v1/datasets?per_page=250&search='+encodeURIComponent(search)}),
+ const [items,setItems]=useState(null);const [views,setViews]=useState(null);const [search,setSearch]=useState('');const [selected,setSelected]=useState(null);const [loading,setLoading]=useState(false);const [using,setUsing]=useState(false);const [error,setError]=useState('');
+ const load=()=>{setLoading(true);setError('');return Promise.all([
+   apiFetch({path:'/ntc/v1/datasets?per_page=250&search='+encodeURIComponent(search.trim())}),
    apiFetch({path:'/ntc/v1/views?type='+encodeURIComponent(type||'')})
- ]).then(([d,v])=>{setItems(d||[]);const q=search.toLowerCase();setViews((v||[]).filter(x=>!q||String(x.name||'').toLowerCase().includes(q)));setSelected(null);});
- useEffect(load,[]);
- const use=()=>{if(selected){onPick(selected);onClose();}};
- const row=(it,kind)=>h('button',{type:'button',key:kind+it.id,className:'ntc-picker-row'+(selected&&selected.kind===kind&&selected.item.id===it.id?' is-selected':''),onClick:()=>setSelected({kind,item:it}),onDoubleClick:use},
-  h('span',{className:'ntc-picker-radio','aria-hidden':'true'}),h('span',{className:'ntc-picker-name'},it.name),h('span',{className:'ntc-picker-meta'},kind==='dataset'?it.row_count+' '+__('rows','native-tables-charts'):''));
- return h(Modal,{title:__('Choose Existing Data or View','native-tables-charts'),onRequestClose:onClose,className:'ntc-dataset-modal'},
-  h('div',{className:'ntc-inline-actions'},h(TextControl,{label:__('Search','native-tables-charts'),value:search,onChange:setSearch}),h(Button,{variant:'secondary',onClick:load},__('Search','native-tables-charts'))),
-  (items===null||views===null)?h(Spinner):h('div',{className:'ntc-picker-body'},
+ ]).then(([d,v])=>{setItems(d||[]);const q=search.trim().toLowerCase();setViews((v||[]).filter(x=>!q||String(x.name||'').toLowerCase().includes(q)));setSelected(null);}).catch(()=>{setItems([]);setViews([]);setSelected(null);setError(__('Could not load reusable data. Try the search again.','native-tables-charts'));}).finally(()=>setLoading(false));};
+ useEffect(()=>{load();},[]);
+ const use=async choice=>{const next=choice||selected;if(!next||using)return;setUsing(true);setError('');try{await onPick(next);setUsing(false);onClose();}catch(e){setUsing(false);setError(__('That data could not be loaded. Nothing in the block was changed.','native-tables-charts'));}};
+ const row=(it,kind)=>{const choice={kind,item:it};return h('button',{type:'button',key:kind+it.id,className:'ntc-picker-row'+(selected&&selected.kind===kind&&selected.item.id===it.id?' is-selected':''),onClick:()=>setSelected(choice),onDoubleClick:()=>use(choice),disabled:using},
+   h('span',{className:'ntc-picker-radio','aria-hidden':'true'}),h('span',{className:'ntc-picker-name'},it.name),h('span',{className:'ntc-picker-meta'},kind==='dataset'?it.row_count+' '+__('rows','native-tables-charts'):''));
+ };
+ return h(Modal,{title:__('Choose Existing Data or View','native-tables-charts'),onRequestClose:using?()=>{}:onClose,className:'ntc-dataset-modal'},
+  h('form',{className:'ntc-picker-search',onSubmit:e=>{e.preventDefault();load();}},h(TextControl,{label:__('Search','native-tables-charts'),value:search,onChange:setSearch}),h(Button,{type:'submit',variant:'secondary',disabled:loading||using},loading?__('Searching…','native-tables-charts'):__('Search','native-tables-charts'))),
+  error&&h(Notice,{status:'error',isDismissible:false},error),
+  (items===null||views===null)?h('div',{className:'ntc-picker-loading'},h(Spinner),h('span',null,__('Loading reusable data…','native-tables-charts'))):h('div',{className:'ntc-picker-body'},
    h('h3',null,type==='chart'?__('Synced Charts','native-tables-charts'):__('Synced Tables','native-tables-charts')),
    views.length?h('div',{className:'ntc-picker-list'},views.map(v=>row(v,'view'))):h('p',{className:'ntc-inspector-note'},__('No matching synced views.','native-tables-charts')),
    h('h3',null,__('Reusable Datasets','native-tables-charts')),
    items.length?h('div',{className:'ntc-picker-list'},items.map(d=>row(d,'dataset'))):h('p',null,__('No datasets found.','native-tables-charts'))
   ),
-  h('div',{className:'ntc-inline-actions'},h(Button,{variant:'tertiary',onClick:onClose},__('Cancel','native-tables-charts')),h(Button,{variant:'primary',disabled:!selected,onClick:use},__('Use selection','native-tables-charts')))
+  h('div',{className:'ntc-modal-actions'},h(Button,{variant:'tertiary',onClick:onClose,disabled:using},__('Cancel','native-tables-charts')),h(Button,{variant:'primary',isBusy:using,disabled:!selected||using,onClick:()=>use()},using?__('Loading selection…','native-tables-charts'):__('Use selection','native-tables-charts')))
  );
+}
+
+async function fetchReusableData(datasetId,viewId,type){
+ const datasetPromise=apiFetch({path:'/ntc/v1/datasets/'+datasetId});
+ const viewPromise=viewId?apiFetch({path:'/ntc/v1/views/'+viewId}):Promise.resolve(null);
+ const allRows=[];let offset=0,total=1;const chunk=750;
+ while(offset<total&&allRows.length<10000){const r=await apiFetch({path:'/ntc/v1/datasets/'+datasetId+'/rows?limit='+chunk+'&offset='+offset});const part=r.rows||[];total=Math.min(10000,Number(r.total||0));allRows.push(...part);if(!part.length)break;offset+=part.length;}
+ const d=await datasetPromise,v=await viewPromise;const next={columns:d.columns||[],rows:allRows};
+ if(v&&v.config){const vc=Object.assign({},v.config);if(type==='table'){next.cellMeta=vc.cellMeta||{};delete vc.cellMeta;}next.config=vc;}
+ return next;
+}
+
+function gridKeyTarget(key,shiftKey,selectionStart,selectionEnd,valueLength,ri,ci,rowCount,colCount){
+ if(!rowCount||!colCount)return null;
+ if(key==='Enter')return {r:clamp(ri+(shiftKey?-1:1),0,rowCount-1),c:ci,shift:false};
+ if(key==='Tab'){
+  const current=ri*colCount+ci;const next=current+(shiftKey?-1:1);if(next<0||next>=rowCount*colCount)return null;
+  return {r:Math.floor(next/colCount),c:next%colCount,shift:false};
+ }
+ if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key))return null;
+ if((key==='ArrowLeft'||key==='ArrowRight')&&shiftKey)return null;
+ if((key==='ArrowLeft'||key==='ArrowRight')&&selectionStart!==selectionEnd)return null;
+ if(key==='ArrowLeft'&&selectionStart>0)return null;
+ if(key==='ArrowRight'&&selectionEnd<valueLength)return null;
+ const dr=key==='ArrowUp'?-1:key==='ArrowDown'?1:0;const dc=key==='ArrowLeft'?-1:key==='ArrowRight'?1:0;
+ return {r:clamp(ri+dr,0,rowCount-1),c:clamp(ci+dc,0,colCount-1),shift:!!shiftKey};
 }
 
 function VirtualGrid({columns,rows,onColumns,onRows,selected,onSelect,onDeleteRow,onDeleteCol,focusValues,onToggleFocus,onFocusLabelChange,labelColumn,allowMultipleFocus}){
@@ -350,7 +380,7 @@ function VirtualGrid({columns,rows,onColumns,onRows,selected,onSelect,onDeleteRo
  const onPaste=(e,ri,ci)=>{const text=e.clipboardData&&e.clipboardData.getData('text/plain');if(!text||(!text.includes('\t')&&!text.includes('\n')))return;e.preventDefault();const parsed=parseDelimited(text,'\t',false);const next=rows.map(r=>r.slice());parsed.rows.forEach((r,rOff)=>{const target=ri+rOff;if(target>=10000)return;while(next.length<=target)next.push(Array(columns.length).fill(''));r.forEach((v,cOff)=>{const tc=ci+cOff;if(tc<columns.length)next[target][tc]=v;});});onRows(next,null);};
  const inSelection=(ri,ci)=>{if(!selected||selected.r<0)return false;const r1=Math.min(selected.r,selected.r2??selected.r),r2=Math.max(selected.r,selected.r2??selected.r),c1=Math.min(selected.c,selected.c2??selected.c),c2=Math.max(selected.c,selected.c2??selected.c);return ri>=r1&&ri<=r2&&ci>=c1&&ci<=c2;};
  const select=(e,r,c)=>onSelect({r,c,shift:!!(e&&e.shiftKey)});
- const keyNav=(e,ri,ci)=>{if(e.key==='Enter'){e.preventDefault();const nr=clamp(ri+(e.shiftKey?-1:1),0,rows.length-1);onSelect({r:nr,c:ci,shift:false});setTimeout(()=>{const el=scroller.current&&scroller.current.querySelector('[data-r="'+nr+'"][data-c="'+ci+'"]');if(el)el.focus();},0);}else if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const dr=e.key==='ArrowUp'?-1:e.key==='ArrowDown'?1:0;const dc=e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:0;const nr=clamp(ri+dr,0,Math.max(0,rows.length-1));const nc=clamp(ci+dc,0,Math.max(0,columns.length-1));onSelect({r:nr,c:nc,shift:!!e.shiftKey});setTimeout(()=>{const el=scroller.current&&scroller.current.querySelector('[data-r="'+nr+'"][data-c="'+nc+'"]');if(el)el.focus();},0);}};
+ const keyNav=(e,ri,ci)=>{const input=e.currentTarget;const target=gridKeyTarget(e.key,!!e.shiftKey,Number(input.selectionStart||0),Number(input.selectionEnd||0),String(input.value||'').length,ri,ci,rows.length,columns.length);if(!target)return;e.preventDefault();onSelect(target);setTimeout(()=>{const el=scroller.current&&scroller.current.querySelector('[data-r="'+target.r+'"][data-c="'+target.c+'"]');if(el){el.focus();el.select();}},0);};
  const hasFocusControls=!!onToggleFocus;
  return h('div',{className:'ntc-grid-wrap'+(hasFocusControls?' has-focus-controls':''),ref:scroller,onScroll:e=>setScrollTop(e.currentTarget.scrollTop)},
   h('div',{className:'ntc-grid-header'},h('div',{className:'ntc-grid-corner'+(hasFocusControls?' has-focus-controls':'')},hasFocusControls&&h('span',{className:'ntc-focus-column-head',title:__('Chart focus','native-tables-charts')},__('Focus','native-tables-charts')),h('span',{className:'ntc-row-number-head'},'#')),columns.map((c,ci)=>h('div',{className:'ntc-grid-colhead',key:ci},h('input',{value:c.label||'',title:__('Column name','native-tables-charts'),onFocus:e=>select(e,-1,ci),onClick:e=>select(e,-1,ci),onChange:e=>updateCol(ci,'label',e.target.value)}),columns.length>1&&h('button',{type:'button',title:__('Delete column','native-tables-charts'),onClick:()=>onDeleteCol(ci)},'×')))),
@@ -655,7 +685,7 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
  const blockProps=useBlockProps({className:'ntc-block-editor-root '+widthClass});
  const setWidthMode=v=>setAttributes({widthMode:v,align:''});
  const [selected,setSelected]=useState({r:0,c:0});const [importOpen,setImportOpen]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [pickerOpen,setPickerOpen]=useState(false);const [loading,setLoading]=useState(false);const [status,setStatus]=useState('');const [customPresets,setCustomPresets]=useState([]);const [previewMode,setPreviewMode]=useState('desktop');const [editorMode,setEditorMode]=useState(type==='chart'?'preview':'data');const [focusOpen,setFocusOpen]=useState(false);const [styleOpen,setStyleOpen]=useState(false);const [cellPropertiesOpen,setCellPropertiesOpen]=useState(false);
- const dirtyRows=useRef(new Set());const saveTimer=useRef(null);const viewTimer=useRef(null);const latestRows=useRef(rows);const needsReplace=useRef(false);const loadingRemote=useRef(false);
+ const dirtyRows=useRef(new Set());const saveTimer=useRef(null);const viewTimer=useRef(null);const latestRows=useRef(rows);const needsReplace=useRef(false);const loadingRemote=useRef(false);const skipRemoteLoad=useRef('');
  const chartConfig=type==='chart'?Object.assign({},CFG.chartDefaults||{},attributes.config||{}):{};
  const focusValues=type==='chart'?(chartConfig.highlightValues||[]).map(String):[];
  const labelColumn=type==='chart'?Number(chartConfig.labelColumn||0):0;
@@ -666,15 +696,11 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
  useEffect(()=>{apiFetch({path:'/ntc/v1/presets'}).then(r=>setCustomPresets(r.custom||[])).catch(()=>{});},[]);
  useEffect(()=>{
    if(!attributes.datasetId||attributes.mode==='inline')return;let cancelled=false;
+   const loadKey=String(attributes.datasetId)+':'+String(attributes.viewId||0);if(skipRemoteLoad.current===loadKey){skipRemoteLoad.current='';return;}
    setLoading(true);loadingRemote.current=true;
    (async()=>{
      try{
-       const datasetPromise=apiFetch({path:'/ntc/v1/datasets/'+attributes.datasetId});
-       const viewPromise=attributes.viewId?apiFetch({path:'/ntc/v1/views/'+attributes.viewId}):Promise.resolve(null);
-       const allRows=[];let offset=0,total=1;const chunk=750;
-       while(offset<total&&allRows.length<10000){const r=await apiFetch({path:'/ntc/v1/datasets/'+attributes.datasetId+'/rows?limit='+chunk+'&offset='+offset});const part=r.rows||[];total=Math.min(10000,Number(r.total||0));allRows.push(...part);if(!part.length)break;offset+=part.length;}
-       const d=await datasetPromise,v=await viewPromise;if(cancelled)return;const next={columns:d.columns||[],rows:allRows};
-       if(v&&v.config){const vc=Object.assign({},v.config);if(type==='table'&&vc.cellMeta){next.cellMeta=vc.cellMeta;delete vc.cellMeta;}next.config=vc;}
+       const next=await fetchReusableData(attributes.datasetId,attributes.viewId,type);if(cancelled)return;
        setAttributes(next);latestRows.current=next.rows;setStatus(attributes.viewId?__('Loaded synced view','native-tables-charts'):__('Loaded reusable dataset','native-tables-charts'));
      }catch(e){if(!cancelled)setStatus(__('Could not load reusable data','native-tables-charts'));}
      finally{if(!cancelled){setLoading(false);setTimeout(()=>{loadingRemote.current=false;},0);}}
@@ -738,10 +764,15 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
  const deleteRowAt=i=>{if(rows.length<=1)return;transformCellMeta(r=>r<i?r:(r>i?r-1:null),null);const next=rows.filter((_,x)=>x!==i);setRows(next,null,true);setSelected({r:clamp(i,0,next.length-1),c:selected?selected.c:0});};
  const deleteColAt=i=>{if(columns.length<=1)return;const mapFn=c=>c<i?c:(c>i?c-1:null);transformCellMeta(null,mapFn);remapTableColumnConfig(mapFn);remapChartColumnConfig(mapFn);setColumns(columns.filter((_,x)=>x!==i));setRows(rows.map(r=>r.filter((_,x)=>x!==i)),null,true);setSelected({r:selected&&selected.r>=0?selected.r:-1,c:clamp(i,0,columns.length-2)});};
  const importData=d=>{if(!d.columns.length)return;setAttributes({cellMeta:{}});setColumns(d.columns);setRows(d.rows.length?d.rows:[Array(d.columns.length).fill('')],null,true);};
- const pickExisting=choice=>{
-   setPickerOpen(false);const item=choice.item;
-   if(choice.kind==='view'){const vc=Object.assign({},item.config||{});const next={mode:'view',datasetId:Number(item.dataset_id),viewId:Number(item.id),config:vc};if(type==='table'&&vc.cellMeta){next.cellMeta=vc.cellMeta;delete vc.cellMeta;}setAttributes(next);}
-   else setAttributes({mode:'dataset',datasetId:Number(item.id),viewId:0});
+ const pickExisting=async choice=>{
+   const item=choice.item;const datasetId=Number(choice.kind==='view'?item.dataset_id:item.id);const viewId=choice.kind==='view'?Number(item.id):0;
+   setStatus(__('Loading selection…','native-tables-charts'));setLoading(true);loadingRemote.current=true;
+   try{
+    const remote=await fetchReusableData(datasetId,viewId,type);const next=Object.assign({mode:viewId?'view':'dataset',datasetId,viewId},remote);
+    if(type==='table'&&!viewId)next.cellMeta={};
+    skipRemoteLoad.current=String(datasetId)+':'+String(viewId);setAttributes(next);latestRows.current=remote.rows;setSelected({r:0,c:0});setStatus(viewId?__('Loaded synced view','native-tables-charts'):__('Loaded reusable dataset','native-tables-charts'));
+   }catch(e){setStatus(__('Could not load reusable data','native-tables-charts'));throw e;}
+   finally{setLoading(false);setTimeout(()=>{loadingRemote.current=false;},0);}
  };
  const createDataset=async name=>{
    const d=await apiFetch({path:'/ntc/v1/datasets',method:'POST',data:{name,columns,rows:[]}});
@@ -887,4 +918,5 @@ if(registerBlockVariation){
  registerBlockVariation('ntc/chart',{name:'dual-metric-benchmark',title:__('Dual-Metric Benchmark Chart','native-tables-charts'),description:__('Two independently scaled benchmark panels, ideal for multi-core/single-core data.','native-tables-charts'),icon:'columns',scope:['inserter'],attributes:{columns:[{id:'product',label:'Product',type:'text',unit:''},{id:'metric1',label:'Metric One',type:'number',unit:''},{id:'metric2',label:'Metric Two',type:'number',unit:''}],rows:[['Product A','100','75'],['Product B','90','85'],['Product C','80','95']],config:{chartType:'dual-metric',title:'Benchmark',subtitle:'Metric One / Metric Two',direction:'higher',labelColumn:0,valueColumns:[1,2],sortColumn:1,sortDirection:'desc',preset:'benchmark-dark'}}});
  registerBlockVariation('ntc/chart',{name:'grouped-comparison',title:__('Grouped Comparison Chart','native-tables-charts'),description:__('Compare several numeric series for each item.','native-tables-charts'),icon:'chart-bar',scope:['inserter'],attributes:{columns:[{id:'product',label:'Product',type:'text',unit:''},{id:'series1',label:'Series One',type:'number',unit:''},{id:'series2',label:'Series Two',type:'number',unit:''}],rows:[['Product A','100','80'],['Product B','90','88']],config:{chartType:'grouped-bar',title:'Comparison',direction:'higher',labelColumn:0,valueColumns:[1,2],sortColumn:1,sortDirection:'desc',preset:'comparison'}}});
 }
+window.NTC_BLOCK_EDITOR_TEST={gridKeyTarget,fetchReusableData};
 })(window.wp);

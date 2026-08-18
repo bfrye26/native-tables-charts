@@ -79,3 +79,18 @@
 
 /* Let a table preview use the same visible width as a sibling chart. */
 .ntc-table-workspace .ntc-chart-workspace-body.is-preview{padding-inline:0}
+
+/* 3.0.8 modal flow and spreadsheet editing polish */
+.ntc-dataset-modal .components-modal__content,.ntc-import-modal .components-modal__content{padding-bottom:0}
+.ntc-modal-intro{max-width:68ch;margin:0 0 20px;color:#50575e;line-height:1.5}
+.ntc-picker-search{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end;margin-bottom:18px}
+.ntc-picker-search .components-base-control{margin:0}.ntc-picker-search .components-base-control__field{margin:0}.ntc-picker-search .components-button{height:40px;min-height:40px;margin:0}
+.ntc-picker-loading{min-height:180px;display:flex;align-items:center;justify-content:center;gap:10px;color:#50575e}
+.ntc-picker-body{max-height:50vh;overflow:auto;padding:0 4px 4px 0;margin:0 -4px 0 0}
+.ntc-picker-body h3{margin:0 0 8px;font-size:13px}.ntc-picker-body .ntc-picker-list+h3,.ntc-picker-body p+h3{margin-top:20px}
+.ntc-picker-row:disabled{cursor:wait;opacity:.68}
+.ntc-modal-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:20px -24px 0;padding:16px 24px;border-top:1px solid #dcdcde;background:#fff;position:sticky;bottom:0;z-index:2}
+.ntc-import-fields{display:flex;flex-direction:column;gap:16px}.ntc-import-fields .components-base-control{margin:0}.ntc-import-fields .components-base-control__field{margin-bottom:0}
+.ntc-import-file{display:flex;flex-direction:column;align-items:flex-start;gap:7px}.ntc-import-file label{font-size:11px;font-weight:500;text-transform:uppercase;color:#1e1e1e}.ntc-import-file input{max-width:100%}
+.ntc-import-modal .ntc-paste-area textarea{min-height:220px;resize:vertical}.ntc-import-modal .components-toggle-control{padding-top:2px}
+@media (max-width:480px){.ntc-picker-search{grid-template-columns:1fr}.ntc-picker-search .components-button{width:100%;justify-content:center}.ntc-modal-actions{margin-inline:-16px;padding-inline:16px}}

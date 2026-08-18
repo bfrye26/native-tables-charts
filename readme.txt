@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 3.0.7
+Stable tag: 3.0.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -184,6 +184,12 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 3.0.8 =
+* Fixed a React lifecycle error that could crash Gutenberg after opening or closing the existing-data picker.
+* Loaded reusable datasets and synced views completely before applying them, preventing partial or broken block previews.
+* Added spreadsheet-style cell navigation with caret-aware arrow keys, Enter, Shift+Enter, and Tab.
+* Realigned and respaced the existing-data and import modals across desktop and narrow editor layouts.
 
 = 3.0.7 =
 * Replaced the complete Gutenberg Shortcode block when migrating an embedded League Table shortcode.
