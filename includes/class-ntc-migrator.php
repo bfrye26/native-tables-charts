@@ -3,11 +3,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; }
 
 final class NTC_Migrator {
-	public const MIGRATION_STATE_VERSION = 4;
-	public const POST_BATCH_SIZE         = 20;
+	public const MIGRATION_STATE_VERSION = 5;
+	public const POST_BATCH_SIZE         = 5;
 	private const TABLE_ROW_BATCH_SIZE   = 200;
 	private const TABLE_CELL_BATCH_SIZE  = 200;
-	private const POST_TIME_BUDGET_SECS  = 12.0;
+	private const POST_TIME_BUDGET_SECS  = 4.0;
 	private const LEGACY_SHORTCODE_BLOCK_PATTERN = '~<!--\s+wp:shortcode(?:\s+\{.*?\})?\s*-->\s*\[lt\s+[^\]]*id=["\']?(\d+)["\']?[^\]]*\]\s*<!--\s+\/wp:shortcode\s*-->~is';
 	private const BROKEN_SHORTCODE_BLOCK_PATTERN = '~<!--\s+wp:shortcode(?:\s+\{.*?\})?\s*-->\s*(<!--\s+wp:ntc/table(?:\s+\{.*?\})?\s*\/-->)\s*<!--\s+\/wp:shortcode\s*-->~is';
 
@@ -75,9 +75,60 @@ final class NTC_Migrator {
 		);
 	}
 
-	public function dry_run(): array {
+	public function detect_batch( array $state = array(), int $limit = 750 ): array {
 		global $wpdb;
-		$d      = $this->detect();
+		if ( ! $state || (int) ( $state['state_version'] ?? 0 ) !== self::MIGRATION_STATE_VERSION ) {
+			$base  = $this->detect( false, false );
+			$state = array_merge(
+				$base,
+				array(
+					'state_version' => self::MIGRATION_STATE_VERSION,
+					'cursor'        => 0,
+					'max_id'        => $base['available'] ? (int) $wpdb->get_var( "SELECT MAX(ID) FROM {$wpdb->posts} WHERE post_status NOT IN ('trash','auto-draft')" ) : 0, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					'scanned'       => 0,
+					'posts'         => 0,
+					'instances'     => 0,
+					'post_ids'      => array(),
+					'complete'      => ! $base['available'],
+				)
+			);
+		}
+		if ( ! empty( $state['complete'] ) || $limit < 1 ) {
+			return $state; }
+		$limit = max( 1, min( 1000, $limit ) );
+		$batch = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT ID,post_content FROM {$wpdb->posts} WHERE ID > %d AND ID <= %d AND post_status NOT IN ('trash','auto-draft') ORDER BY ID ASC LIMIT %d",
+				(int) $state['cursor'],
+				(int) $state['max_id'],
+				$limit
+			),
+			ARRAY_A
+		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$batch = $batch ?: array();
+		foreach ( $batch as $post ) {
+			$content = (string) $post['post_content'];
+			$state['cursor'] = (int) $post['ID'];
+			++$state['scanned'];
+			if ( false === strpos( $content, '[lt ' ) && false === strpos( $content, 'wp:dalt/table' ) && ( false === strpos( $content, 'wp:shortcode' ) || false === strpos( $content, 'wp:ntc/table' ) ) ) {
+				continue; }
+			preg_match_all( '/\[lt\s+[^\]]*id=["\']?(\d+)["\']?[^\]]*\]/i', $content, $shortcodes );
+			preg_match_all( self::BROKEN_SHORTCODE_BLOCK_PATTERN, $content, $broken );
+			$instances = count( $shortcodes[0] ) + substr_count( $content, 'wp:dalt/table' ) + count( $broken[0] );
+			if ( $instances > 0 ) {
+				$state['post_ids'][] = (int) $post['ID'];
+				$state['instances'] += $instances;
+				++$state['posts'];
+			}
+		}
+		$state['post_ids'] = $this->normalize_target_ids( (array) $state['post_ids'] );
+		$state['complete'] = ! $batch || count( $batch ) < $limit || (int) $state['cursor'] >= (int) $state['max_id'];
+		return $state;
+	}
+
+	public function dry_run( ?array $detected = null ): array {
+		global $wpdb;
+		$d      = $detected ?: $this->detect();
 		unset( $d['post_ids'] );
 		$report = array_merge(
 			$d,
@@ -102,7 +153,7 @@ final class NTC_Migrator {
 		return $report;
 	}
 
-	public function migrate( bool $convert_content = true, int $cursor = 0, int $chunk = self::POST_BATCH_SIZE, array $target_ids = array(), int $target_instances = 0 ): array {
+	public function migrate( bool $convert_content = true, int $cursor = 0, int $chunk = self::POST_BATCH_SIZE, array $target_ids = array(), int $target_instances = -1 ): array {
 		if ( ! current_user_can( 'ntc_migrate' ) && ! current_user_can( 'manage_options' ) ) {
 			return array(
 				'success' => false,
@@ -166,7 +217,7 @@ final class NTC_Migrator {
 		}
 		$batch = 'lt-' . gmdate( 'YmdHis' ) . '-' . wp_generate_password( 6, false, false );
 		if ( $convert_content ) {
-			if ( $target_ids ) {
+			if ( $target_ids || $target_instances >= 0 ) {
 				$target_ids = $this->normalize_target_ids( $target_ids );
 			} else {
 				$target_detect    = $this->detect( true, true );
@@ -188,10 +239,13 @@ final class NTC_Migrator {
 		$target_state = $convert_content ? get_transient( $this->migration_target_key( $batch_id ) ) : false;
 		$targets_refreshed = false;
 		if ( $convert_content && ! is_array( $target_state ) ) {
-			$detected = $this->detect( true, true );
-			set_transient( $this->migration_target_key( $batch_id ), array( 'ids' => (array) ( $detected['post_ids'] ?? array() ), 'instances' => (int) ( $detected['instances'] ?? 0 ) ), DAY_IN_SECONDS );
-			$target_offset = 0;
-			$targets_refreshed = true;
+			return array(
+				'success'             => false,
+				'batch_id'            => $batch_id,
+				'errors'              => array( __( 'The bounded migration target list expired. Restart migration detection before continuing.', 'native-tables-charts' ) ),
+				'migration_complete'  => false,
+				'targets_refreshed'   => false,
+			);
 		}
 		$result                      = $this->run_migration_batch( $batch_id, $convert_content, $table_cursor, $cursor, $chunk, 0, $target_offset );
 		$result['targets_refreshed'] = $targets_refreshed;

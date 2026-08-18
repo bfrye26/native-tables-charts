@@ -206,6 +206,9 @@ $GLOBALS['wpdb'] = new class() {
 	public $queries     = array();
 	public function get_var( $q ) {
 		$this->queries[] = $q;
+		if ( false !== strpos( $q, 'MAX(ID)' ) && isset( $GLOBALS['fake_posts'] ) ) {
+			return $GLOBALS['fake_posts'] ? max( array_map( static fn( $post ) => (int) $post['ID'], $GLOBALS['fake_posts'] ) ) : 0;
+		}
 		if ( false !== strpos( $q, 'SHOW TABLES LIKE' ) && ! empty( $GLOBALS['fake_legacy_schema'] ) && preg_match( "/LIKE '([^']+)'/", $q, $table_match ) ) {
 			return $table_match[1];
 		}

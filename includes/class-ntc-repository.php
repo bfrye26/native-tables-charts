@@ -12,7 +12,7 @@ final class NTC_Repository {
 			$where  = 'WHERE name LIKE %s';
 			$args[] = '%' . $wpdb->esc_like( $search ) . '%';
 		}
-		$sql    = "SELECT d.*, (SELECT COUNT(*) FROM {$wpdb->prefix}ntc_rows r WHERE r.dataset_id=d.id) AS row_count, (SELECT COUNT(*) FROM {$wpdb->prefix}ntc_views v WHERE v.dataset_id=d.id) AS view_count FROM {$table} d {$where} ORDER BY updated_at DESC LIMIT %d OFFSET %d";
+		$sql    = "SELECT d.*, COALESCE(r.row_count,0) AS row_count, COALESCE(v.view_count,0) AS view_count FROM {$table} d LEFT JOIN (SELECT dataset_id,COUNT(*) AS row_count FROM {$wpdb->prefix}ntc_rows GROUP BY dataset_id) r ON r.dataset_id=d.id LEFT JOIN (SELECT dataset_id,COUNT(*) AS view_count FROM {$wpdb->prefix}ntc_views GROUP BY dataset_id) v ON v.dataset_id=d.id {$where} ORDER BY d.updated_at DESC LIMIT %d OFFSET %d";
 		$args[] = max( 1, min( 500, $limit ) );
 		$args[] = max( 0, $offset );
 		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -130,6 +130,17 @@ final class NTC_Repository {
 			array( '%s', '%s' ),
 			array( '%d' )
 		);
+	}
+
+	public function has_post_source_for_type( string $post_type ): bool {
+		global $wpdb;
+		$configs = $wpdb->get_col( "SELECT source_config FROM {$wpdb->prefix}ntc_datasets WHERE source_mode='posts'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		foreach ( (array) $configs as $raw ) {
+			$config = json_decode( (string) $raw, true );
+			if ( is_array( $config ) && (string) ( $config['post_type'] ?? 'post' ) === $post_type ) {
+				return true; }
+		}
+		return false;
 	}
 
 	public function get_rows( int $dataset_id, int $limit = 0, int $offset = 0 ): array {

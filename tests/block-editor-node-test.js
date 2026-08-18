@@ -12,7 +12,7 @@ const sandbox = {
 const apiCalls = [];
 sandbox.apiFetch = ( { path } ) => {
 	apiCalls.push( path );
-	if ( path === '/ntc/v1/datasets/7' ) return Promise.resolve( { columns: [ { label: 'Product' }, { label: 'Score' } ] } );
+	if ( path === '/ntc/v1/datasets/7' ) return Promise.resolve( { columns: [ { label: 'Product' }, { label: 'Score' } ], row_count: 1 } );
 	if ( path === '/ntc/v1/views/3' ) return Promise.resolve( { config: { preset: 'compact', cellMeta: { '0:0': { fontWeight: '700' } } } } );
 	if ( path.includes( '/rows?' ) ) return Promise.resolve( { rows: [ [ 'A', '10' ] ], total: 1 } );
 	return Promise.reject( new Error( 'Unexpected API path: ' + path ) );

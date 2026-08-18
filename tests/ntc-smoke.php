@@ -62,9 +62,10 @@ $schema = $call(
 		'dataset_name'       => 'Scores',
 	),
 	array(
-		'enableSchema' => true,
-		'title'        => 'Bench',
-		'valueColumns' => array( 1 ),
+		'enableSchema'     => true,
+		'title'            => 'Bench',
+		'schemaDescription' => 'A complete benchmark dataset describing repeatable score measurements for the compared products.',
+		'valueColumns'     => array( 1 ),
 	),
 	array(
 		array(),
@@ -77,14 +78,18 @@ $schema = $call(
 );
 $assert( false !== strpos( $schema, '"@type":"Dataset"' ) && false !== strpos( $schema, 'variableMeasured' ), 'schema emits Dataset + variables' );
 $assert( false === strpos( $schema, '</script><script' ), 'schema values escaped' );
+$assert( '' === $call( 'schema_json', array(), array( 'schemaType' => 'dataset', 'schemaName' => 'Thin', 'schemaDescription' => 'Too short' ), array() ), 'dataset schema refuses an incomplete description' );
+$complete_schema = $call( 'schema_json', array( 'dataset_id' => 9, 'dataset_updated_at' => '2026-08-17 10:00:00' ), array( 'schemaType' => 'dataset', 'schemaName' => 'Public Scores', 'schemaDescription' => 'A complete public benchmark dataset with documented scores for every product in this comparison.', 'schemaUrl' => 'https://example.com/scores', 'schemaLicense' => 'https://creativecommons.org/licenses/by/4.0/', 'schemaCreatorName' => 'Data Team', 'schemaPublisherName' => 'Example Publisher', 'schemaDistributionUrl' => 'https://example.com/scores.csv', 'schemaDistributionFormat' => 'text/csv' ), array() );
+$assert( false !== strpos( $complete_schema, '"creator"' ) && false !== strpos( $complete_schema, '"distribution"' ) && false !== strpos( $complete_schema, 'creativecommons.org' ), 'dataset schema emits provenance, licensing, and distribution fields' );
 $assert( '' === $call( 'updated_date_html', array( 'showUpdatedDate' => false ), array( 'dataset_updated_at' => 'x' ) ), 'updated date off returns empty' );
 $xss_schema = $call(
 	'schema_json',
 	array( 'dataset_updated_at' => '2026-08-17 10:00:00' ),
 	array(
-		'enableSchema' => true,
-		'title'        => 'Bench',
-		'valueColumns' => array( 1 ),
+		'enableSchema'     => true,
+		'title'            => 'Bench',
+		'schemaDescription' => 'A complete benchmark dataset describing repeatable score measurements for the compared products.',
+		'valueColumns'     => array( 1 ),
 	),
 	array(
 		array(),
@@ -96,7 +101,7 @@ $xss_schema = $call(
 	)
 );
 $assert( false === strpos( $xss_schema, '<script>alert' ), 'schema_json escapes column label script tag' );
-$assert( false !== strpos( $xss_schema, '&lt;' ), 'schema_json emits escaped entities for label' );
+$assert( false !== strpos( $xss_schema, 'alert(1)' ) && false === strpos( $xss_schema, '</script>' . '<script' ), 'schema_json strips markup while preserving safe label text' );
 $review_schema = $call(
 	'schema_json',
 	array( 'dataset_updated_at' => '2026-08-17 10:00:00' ),
@@ -104,6 +109,7 @@ $review_schema = $call(
 		'schemaType'   => 'review',
 		'title'        => 'Game X',
 		'subtitle'     => 'A great game',
+		'reviewAuthorName' => 'Test Author',
 		'labelColumn'  => 0,
 		'valueColumns' => array( 1 ),
 	),
@@ -112,12 +118,17 @@ $review_schema = $call(
 );
 $assert( false !== strpos( $review_schema, '"@type":"Review"' ), 'review schema emits Review type' );
 $assert( false !== strpos( $review_schema, '"ratingValue":8.5' ), 'review schema emits ratingValue 8.5' );
+$assert( false === strpos( $review_schema, 'aggregateRating' ), 'review schema does not invent an aggregate rating' );
+$aggregate_schema = $call( 'schema_json', array(), array( 'schemaType' => 'review', 'reviewAuthorName' => 'Test Author', 'reviewBody' => 'A sufficiently specific editorial review summary.', 'reviewUseAggregate' => true, 'reviewRatingCount' => 42, 'labelColumn' => 0, 'valueColumns' => array( 1 ), 'ratingMax' => 10 ), array(), array( array( 'Game X', '8.5' ) ) );
+$assert( false !== strpos( $aggregate_schema, '"aggregateRating"' ) && false !== strpos( $aggregate_schema, '"ratingCount":42' ), 'review aggregate rating requires an explicit multi-rating count' );
 $xss_review = $call(
 	'schema_json',
 	array(),
 	array(
 		'schemaType'   => 'review',
-		'title'        => '</script><script>alert(1)</script>',
+		'reviewItemName' => '</script><script>alert(1)</script>',
+		'reviewAuthorName' => 'Test Author',
+		'reviewBody'   => 'A sufficiently specific editorial review summary.',
 		'labelColumn'  => 0,
 		'valueColumns' => array( 1 ),
 	),
@@ -131,6 +142,8 @@ $clamp_schema = $call(
 	array(
 		'schemaType'   => 'review',
 		'title'        => 'Game X',
+		'reviewAuthorName' => 'Test Author',
+		'reviewBody'   => 'A sufficiently specific editorial review summary.',
 		'labelColumn'  => 0,
 		'valueColumns' => array( 1 ),
 		'ratingMax'    => 10,
@@ -324,6 +337,13 @@ $framed_table = $call(
 	)
 );
 $assert( false !== strpos( $framed_table, 'border:4px solid #123456' ) && false !== strpos( $framed_table, 'border-radius:8px' ), 'table outer frame renders only when configured' );
+$large_rows = array_map( static fn( $i ) => array( 'Row ' . $i, (string) $i ), range( 1, 600 ) );
+$large_table = $call( 'render_table', array( 'columns' => array( array( 'label' => 'Item', 'type' => 'text' ), array( 'label' => 'Value', 'type' => 'number' ) ), 'rows' => $large_rows, 'config' => array() ) );
+$table_markup = substr( $large_table, 0, (int) strpos( $large_table, '<script type="application/json" class="ntc-table-data">' ) );
+$assert( false !== strpos( $large_table, 'data-progressive="1"' ) && 101 === substr_count( $table_markup, '<tr' ), 'large tables keep only one 100-row page in the live DOM' );
+$auto_chart_rows = $call( 'prepare_chart_rows', array_map( static fn( $i ) => array( 'Row ' . $i, $i ), range( 1, 1000 ) ), array(), array( 'chartType' => 'horizontal-bar', 'labelColumn' => 0, 'valueColumns' => array( 1 ), 'sortColumn' => 1, 'sortDirection' => 'desc' ) );
+$line_chart_rows = $call( 'prepare_chart_rows', array_map( static fn( $i ) => array( 'Row ' . $i, $i ), range( 1, 1000 ) ), array(), array( 'chartType' => 'line', 'labelColumn' => 0, 'valueColumns' => array( 1 ), 'sortColumn' => 1, 'sortDirection' => 'none' ) );
+$assert( 100 === count( $auto_chart_rows ) && 500 === count( $line_chart_rows ), 'chart row limits protect categorical and continuous visualizations' );
 $assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '<svg' ), 'sparkline renders svg' );
 $assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '10,20,30' ), 'sparkline keeps raw value (sr-only)' );
 $assert( false !== strpos( $call( 'render_cell', '+12.5%', array(), array(), false, 'delta' ), 'is-up' ), 'delta positive class' );
@@ -362,8 +382,8 @@ $assert( 3 === count( $GLOBALS['wpdb']->queries ), 'patch_rows batches 1200 rows
 $assert( 200 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 'patch last statement holds 200 rows' );
 require_once dirname( __DIR__ ) . '/includes/class-ntc-migrator.php';
 $migrator                   = new NTC_Migrator( $repo );
-$assert( 4 === NTC_Migrator::MIGRATION_STATE_VERSION, 'migration rejects incompatible saved progress before continuing' );
-$assert( 20 === NTC_Migrator::POST_BATCH_SIZE, 'migration post batches stay below proxy timeout thresholds' );
+$assert( 5 === NTC_Migrator::MIGRATION_STATE_VERSION, 'migration rejects incompatible saved progress before continuing' );
+$assert( 5 === NTC_Migrator::POST_BATCH_SIZE, 'migration post batches stay below proxy timeout thresholds' );
 $call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
 	$mm = ( new ReflectionClass( 'NTC_Migrator' ) )->getMethod( $m );
 	$mm->setAccessible( true );
@@ -384,6 +404,14 @@ $GLOBALS['fake_posts']                = array(
 $repair_detect = $migrator->detect();
 $assert( 1 === $repair_detect['posts'] && 1 === $repair_detect['instances'] && array( 78 ) === $repair_detect['post_ids'], 'migration detection rediscovers posts damaged by nested shortcode wrappers' );
 $assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), "post_content LIKE '%wp:shortcode%' AND post_content LIKE '%wp:ntc/table%'" ), 'migration detection query includes malformed native table wrappers' );
+unset( $GLOBALS['fake_legacy_schema'], $GLOBALS['fake_legacy_table_count'], $GLOBALS['fake_posts'] );
+$GLOBALS['fake_legacy_schema'] = true;
+$GLOBALS['fake_legacy_table_count'] = 2;
+$GLOBALS['fake_posts'] = array( array( 'ID' => 1, 'post_content' => '[lt id="1"]' ), array( 'ID' => 2, 'post_content' => 'Unrelated' ), array( 'ID' => 3, 'post_content' => '<!-- wp:dalt/table {"id":2} /-->' ) );
+$detect_page_1 = $migrator->detect_batch( array(), 2 );
+$detect_page_2 = $migrator->detect_batch( $detect_page_1, 2 );
+$assert( empty( $detect_page_1['complete'] ) && 2 === $detect_page_1['cursor'], 'migration detection scans a bounded post-ID page' );
+$assert( ! empty( $detect_page_2['complete'] ) && 2 === $detect_page_2['posts'] && 2 === $detect_page_2['instances'], 'bounded migration detection preserves exact post and instance totals' );
 unset( $GLOBALS['fake_legacy_schema'], $GLOBALS['fake_legacy_table_count'], $GLOBALS['fake_posts'] );
 $GLOBALS['fake_dataset']                = array( 'id' => 42, 'columns_json' => '[]' );
 $GLOBALS['fake_options']                = array( 'ntc_migration_map' => array( 1 => 42, 2 => 42 ) );
@@ -1243,6 +1271,13 @@ $GLOBALS['fake_post_source'] = array(
 	'source_mode'   => 'posts',
 	'source_config' => '{"meta_label":"score_label","meta_value":["score"],"posts_per_page":5}',
 );
+$plugin_ref = new ReflectionClass( $ntc );
+$renderer_property = $plugin_ref->getProperty( 'renderer' );
+$renderer_property->setAccessible( true );
+$renderer_instance = $renderer_property->getValue( $ntc );
+$cache_property = ( new ReflectionClass( $renderer_instance ) )->getProperty( 'request_cache' );
+$cache_property->setAccessible( true );
+$cache_property->setValue( $renderer_instance, array() );
 $GLOBALS['asked_options']    = array();
 $post_driven                 = $ntc->shortcode_dataset(
 	array(

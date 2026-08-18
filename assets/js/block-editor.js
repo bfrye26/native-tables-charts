@@ -11,6 +11,8 @@ const apiFetch=wp.apiFetch;
 const SSR=wp.serverSideRender && (wp.serverSideRender.default||wp.serverSideRender);
 const CFG=window.NTC_EDITOR||{};
 if(apiFetch&&apiFetch.use&&apiFetch.createNonceMiddleware&&CFG.nonce){apiFetch.use(apiFetch.createNonceMiddleware(CFG.nonce));}
+const reusableCache=new Map();
+let presetsPromise=null;
 
 const clone=o=>JSON.parse(JSON.stringify(o));
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
@@ -347,14 +349,18 @@ function DatasetPicker({onClose,onPick,type}){
 }
 
 async function fetchReusableData(datasetId,viewId,type){
- const datasetPromise=apiFetch({path:'/ntc/v1/datasets/'+datasetId});
- const viewPromise=viewId?apiFetch({path:'/ntc/v1/views/'+viewId}):Promise.resolve(null);
- const allRows=[];let offset=0,total=1;const chunk=750;
- while(offset<total&&allRows.length<10000){const r=await apiFetch({path:'/ntc/v1/datasets/'+datasetId+'/rows?limit='+chunk+'&offset='+offset});const part=r.rows||[];total=Math.min(10000,Number(r.total||0));allRows.push(...part);if(!part.length)break;offset+=part.length;}
- const d=await datasetPromise,v=await viewPromise;const next={columns:d.columns||[],rows:allRows};
- if(v&&v.config){const vc=Object.assign({},v.config);if(type==='table'){next.cellMeta=vc.cellMeta||{};delete vc.cellMeta;}next.config=vc;}
- return next;
+ const key=[datasetId,viewId||0,type].join(':');
+ if(!reusableCache.has(key))reusableCache.set(key,(async()=>{
+  const [d,v]=await Promise.all([apiFetch({path:'/ntc/v1/datasets/'+datasetId}),viewId?apiFetch({path:'/ntc/v1/views/'+viewId}):Promise.resolve(null)]);
+  const allRows=[];let offset=0,total=Math.min(10000,Number(d.row_count||0));const chunk=2000;
+  while(offset<total){const r=await apiFetch({path:'/ntc/v1/datasets/'+datasetId+'/rows?limit='+chunk+'&offset='+offset+'&include_total=0'});const part=r.rows||[];allRows.push(...part);if(!part.length)break;offset+=part.length;}
+  const next={columns:d.columns||[],rows:allRows};
+  if(v&&v.config){const vc=Object.assign({},v.config);if(type==='table'){next.cellMeta=vc.cellMeta||{};delete vc.cellMeta;}next.config=vc;}
+  return next;
+ })().catch(error=>{reusableCache.delete(key);throw error;}));
+ return clone(await reusableCache.get(key));
 }
+function invalidateReusableCache(datasetId){Array.from(reusableCache.keys()).forEach(key=>{if(String(key).startsWith(String(datasetId)+':'))reusableCache.delete(key);});}
 
 function gridKeyTarget(key,shiftKey,selectionStart,selectionEnd,valueLength,ri,ci,rowCount,colCount){
  if(!rowCount||!colCount)return null;
@@ -475,6 +481,52 @@ function AnnotationEditor({config,onPatch}){
  )),h(Button,{variant:'secondary',onClick:()=>onPatch({annotations:(rules||[]).concat([{type:'marker',at:'',label:'',color:''}])})},__('Add annotation','native-tables-charts')));
 }
 
+function SchemaControls({config,onPatch,allowReview}){
+ const type=config.schemaType||((config.enableSchema&&'dataset')||'off');
+ const field=(key,label,props={})=>h(TextControl,Object.assign({label,value:config[key]||'',onChange:value=>onPatch({[key]:value})},props));
+ const area=(key,label,props={})=>h(TextareaControl,Object.assign({label,value:config[key]||'',onChange:value=>onPatch({[key]:value})},props));
+ const options=[{label:__('Off','native-tables-charts'),value:'off'},{label:__('Dataset','native-tables-charts'),value:'dataset'}];if(allowReview)options.push({label:__('Review','native-tables-charts'),value:'review'});
+ return h(wp.element.Fragment,null,
+  h(SelectControl,{label:__('Structured data type','native-tables-charts'),value:type,options,onChange:value=>onPatch({schemaType:value,enableSchema:value!=='off'})}),
+  type==='off'&&h('p',{className:'ntc-inspector-note'},__('Keep this off when an SEO plugin or the surrounding page already describes the same entity.','native-tables-charts')),
+  type==='dataset'&&h(wp.element.Fragment,null,
+   field('schemaName',__('Dataset name','native-tables-charts'),{help:__('Falls back to the chart title, table caption, or reusable dataset name.','native-tables-charts')}),
+   area('schemaDescription',__('Dataset description','native-tables-charts'),{help:__('Required for output. Write a specific description between 50 and 5,000 characters.','native-tables-charts')}),
+   String(config.schemaDescription||'').trim().length>0&&String(config.schemaDescription||'').trim().length<50&&h(Notice,{status:'warning',isDismissible:false},__('Add more detail: Dataset schema is not emitted until the description is at least 50 characters.','native-tables-charts')),
+   field('schemaUrl',__('Canonical dataset URL','native-tables-charts'),{type:'url',help:__('Leave empty to use the current post URL.','native-tables-charts')}),
+   field('schemaIdentifier',__('Dataset identifier','native-tables-charts')),
+   field('schemaLicense',__('License URL','native-tables-charts'),{type:'url'}),
+   field('schemaCreatorName',__('Creator name','native-tables-charts'),{help:__('Falls back to the current post author.','native-tables-charts')}),
+   h(SelectControl,{label:__('Creator type','native-tables-charts'),value:config.schemaCreatorType||'Person',options:[{label:__('Person','native-tables-charts'),value:'Person'},{label:__('Organization','native-tables-charts'),value:'Organization'}],onChange:value=>onPatch({schemaCreatorType:value})}),
+   field('schemaPublisherName',__('Publisher name','native-tables-charts'),{help:__('Falls back to the site name.','native-tables-charts')}),
+   area('schemaKeywords',__('Keywords','native-tables-charts'),{help:__('Separate keywords with commas or new lines.','native-tables-charts')}),
+   field('schemaTemporalCoverage',__('Temporal coverage','native-tables-charts'),{placeholder:'2020/2026'}),
+   field('schemaSameAs',__('Same-as URL','native-tables-charts'),{type:'url'}),
+   field('schemaDistributionUrl',__('Public download URL','native-tables-charts'),{type:'url',help:__('Use a stable public CSV, TSV, or JSON URL—not the browser download button.','native-tables-charts')}),
+   field('schemaDistributionFormat',__('Download MIME type','native-tables-charts'),{placeholder:'text/csv'})
+  ),
+  type==='review'&&h(wp.element.Fragment,null,
+   h(Notice,{status:'info',isDismissible:false},__('Review schema must describe one real product and one editorial review. It is not emitted until the product, author, body, and rating are available.','native-tables-charts')),
+   field('reviewItemName',__('Product name','native-tables-charts'),{help:__('Falls back to the focused row, then the first row label.','native-tables-charts')}),
+   field('reviewItemUrl',__('Product URL','native-tables-charts'),{type:'url'}),
+   field('reviewItemImage',__('Product image URL','native-tables-charts'),{type:'url'}),
+   field('reviewBrand',__('Brand','native-tables-charts')),
+   field('reviewSku',__('SKU','native-tables-charts')),
+   field('reviewAuthorName',__('Review author','native-tables-charts'),{help:__('Falls back to the current post author.','native-tables-charts')}),
+   field('reviewPublisherName',__('Review publisher','native-tables-charts'),{help:__('Falls back to the site name.','native-tables-charts')}),
+   area('reviewBody',__('Review summary','native-tables-charts'),{help:__('Required. Falls back to the chart subtitle.','native-tables-charts')}),
+   field('reviewDatePublished',__('Date published','native-tables-charts'),{type:'date'}),
+   field('reviewDateModified',__('Date modified','native-tables-charts'),{type:'date'}),
+   area('reviewPositiveNotes',__('Pros','native-tables-charts'),{help:__('One item per line.','native-tables-charts')}),
+   area('reviewNegativeNotes',__('Cons','native-tables-charts'),{help:__('One item per line.','native-tables-charts')}),
+   h(RangeControl,{label:__('Rating minimum','native-tables-charts'),value:Number(config.ratingMin||0),min:0,max:10,onChange:value=>onPatch({ratingMin:value})}),
+   h(RangeControl,{label:__('Rating maximum','native-tables-charts'),value:Number(config.ratingMax||5),min:1,max:100,onChange:value=>onPatch({ratingMax:value})}),
+   h(ToggleControl,{label:__('Include aggregate rating','native-tables-charts'),help:__('Enable only when the displayed rating genuinely aggregates multiple ratings.','native-tables-charts'),checked:!!config.reviewUseAggregate,onChange:value=>onPatch({reviewUseAggregate:value})}),
+   config.reviewUseAggregate&&h(RangeControl,{label:__('Number of ratings','native-tables-charts'),value:Number(config.reviewRatingCount||2),min:2,max:100000,onChange:value=>onPatch({reviewRatingCount:value})})
+  )
+ );
+}
+
 function TableInspector({attributes,setAttributes,selected,customPresets}){
  const columns=attributes.columns||[];const raw=attributes.config||{};const presetValue=raw.preset||'editorial';let presetSettings={};
  if(String(presetValue).startsWith('custom:')){const p=(customPresets||[]).find(x=>String(x.id)===String(presetValue).split(':')[1]);presetSettings=(p&&p.settings)||{};}else presetSettings=(CFG.tablePresets||{})[presetValue]||{};
@@ -539,6 +591,7 @@ function TableInspector({attributes,setAttributes,selected,customPresets}){
     config.enablePagination&&h(RangeControl,{label:__('Rows per page','native-tables-charts'),value:Number(config.rowsPerPage||10),min:1,max:100,onChange:v=>setConfig(Object.assign({},config,{rowsPerPage:v}))}),
     h(ToggleControl,{label:__('CSV download button','native-tables-charts'),checked:!!config.enableExport,onChange:v=>setConfig(Object.assign({},config,{enableExport:v}))})
   ),
+	 h(PanelBody,{title:__('SEO & structured data','native-tables-charts'),initialOpen:false},h(SchemaControls,{config,onPatch:next=>setConfig(Object.assign({},config,next)),allowReview:false})),
   h(PanelBody,{title:__('Colours, Typography & Spacing','native-tables-charts'),initialOpen:false},
     h(TextControl,{label:__('Header background','native-tables-charts'),value:config.headerBackground||'',onChange:v=>setConfig(Object.assign({},config,{headerBackground:v}))}),
     h(TextControl,{label:__('Header text','native-tables-charts'),value:config.headerColor||'',onChange:v=>setConfig(Object.assign({},config,{headerColor:v}))}),
@@ -582,25 +635,25 @@ function TableInspector({attributes,setAttributes,selected,customPresets}){
     h(RangeControl,{label:__('Average formula decimals','native-tables-charts'),value:Number(config.averageDecimals||2),min:0,max:8,onChange:v=>setConfig(Object.assign({},config,{averageDecimals:v}))}),
     h(SelectControl,{label:__('Average formula rounding','native-tables-charts'),value:config.averageRound||'half_up',options:[{label:'PHP_ROUND_HALF_UP',value:'half_up'},{label:'PHP_ROUND_HALF_DOWN',value:'half_down'},{label:'PHP_ROUND_HALF_EVEN',value:'half_even'},{label:'PHP_ROUND_HALF_ODD',value:'half_odd'}],onChange:v=>setConfig(Object.assign({},config,{averageRound:v}))}),
     h(TextControl,{label:__('Custom class','native-tables-charts'),value:config.customClass||'',onChange:v=>setConfig(Object.assign({},config,{customClass:v}))}),
-    h(ToggleControl,{label:__('Schema.org metadata','native-tables-charts'),checked:!!config.enableSchema,onChange:v=>setConfig(Object.assign({},config,{enableSchema:v}))}),
-    h(ToggleControl,{label:__('Show last-updated date','native-tables-charts'),checked:!!config.showUpdatedDate,onChange:v=>setConfig(Object.assign({},config,{showUpdatedDate:v}))})
+	    h(ToggleControl,{label:__('Show last-updated date','native-tables-charts'),checked:!!config.showUpdatedDate,onChange:v=>setConfig(Object.assign({},config,{showUpdatedDate:v}))})
   )
  );
 }
 
-function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFocusData}){
+function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFocusData,rows}){
  const columns=attributes.columns||[];const rawConfig=attributes.config||{};const presets=CFG.chartPresets||{};const presetValue=rawConfig.preset||'benchmark-dark';let presetSettings={};
  if(String(presetValue).startsWith('custom:')){const p=(customPresets||[]).find(x=>String(x.id)===String(presetValue).split(':')[1]);presetSettings=(p&&p.settings)||{};}else presetSettings=presets[presetValue]||{};
  const baseConfig=Object.assign({},CFG.chartDefaults||{},presetSettings,rawConfig);const typographySettings=baseConfig.typographyPreset!=='custom'?((CFG.chartTypographyPresets||{})[baseConfig.typographyPreset]||{}):{};const densitySettings=(baseConfig.density&&baseConfig.density!=='auto'&&baseConfig.density!=='custom')?((CFG.chartDensityPresets||{})[baseConfig.density]||{}):{};const config=Object.assign({},baseConfig,typographySettings,densitySettings,rawConfig);
  const patch=next=>setAttributes({config:Object.assign({},rawConfig,next)});
  const values=(config.valueColumns||[]).map(Number);
  const labelColumn=Number(config.labelColumn||0);
- const rowLabels=(attributes.rows||[]).map((r,i)=>({label:String(r[labelColumn]??'')||__('Row','native-tables-charts')+' '+(i+1),value:String(r[labelColumn]??'')})).filter(x=>x.value!=='');
+ rows=rows||attributes.rows||[];
+ const rowLabels=rows.map((r,i)=>({label:String(r[labelColumn]??'')||__('Row','native-tables-charts')+' '+(i+1),value:String(r[labelColumn]??'')})).filter(x=>x.value!=='');
  const focusValues=(config.highlightValues||[]).map(String);
  const focusValue=focusValues[0]||'';
  const setPrimaryFocus=v=>patch({highlightValues:v?[v]:[]});
  const dataMode=config.accessibleDataMode||'screenreader';
- const issues=chartSetupIssues(columns,attributes.rows||[],config);
+ const issues=chartSetupIssues(columns,rows,config);
  return h(InspectorControls,null,
   h(PanelBody,{title:__('Chart setup','native-tables-charts'),initialOpen:true},
     h(ChartTypeBrowser,{value:config.chartType||'horizontal-bar',onChange:v=>patch({chartType:v})}),
@@ -614,7 +667,7 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
     config.chartType==='line'&&h(ToggleControl,{label:__('Enable brush selection','native-tables-charts'),checked:!!config.enableBrush,onChange:v=>patch({enableBrush:v})})
   ),
   h(PanelBody,{title:__('Data & mapping','native-tables-charts'),initialOpen:true},
-    h('p',{className:'ntc-inspector-note'},(attributes.rows||[]).length+' '+(((attributes.rows||[]).length===1)?__('row','native-tables-charts'):__('rows','native-tables-charts'))+' • '+Math.max(1,values.length)+' '+(Math.max(1,values.length)===1?__('metric','native-tables-charts'):__('metrics','native-tables-charts'))),
+    h('p',{className:'ntc-inspector-note'},rows.length+' '+((rows.length===1)?__('row','native-tables-charts'):__('rows','native-tables-charts'))+' • '+Math.max(1,values.length)+' '+(Math.max(1,values.length)===1?__('metric','native-tables-charts'):__('metrics','native-tables-charts'))),
 	 h('p',{className:'ntc-inspector-note ntc-mapping-hint'},chartMappingHelp(config.chartType||'horizontal-bar')),
     issues.length>0&&h(Notice,{status:issues.some(issue=>issue.status==='error')?'error':'warning',isDismissible:false},issues[0].message),
     h('div',{className:'ntc-inline-actions ntc-inspector-data-actions'},onEditData&&h(Button,{variant:'secondary',icon:'editor-table',onClick:onEditData},__('Edit data','native-tables-charts')),onFocusData&&h(Button,{variant:'tertiary',icon:'fullscreen-alt',onClick:onFocusData},__('Open focus mode','native-tables-charts'))),
@@ -631,11 +684,12 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
   ),
   h(PanelBody,{title:__('Typography & density','native-tables-charts'),initialOpen:false},
     h(ChartTypographyControls,{config,onPatch:patch}),
-    h(ChartDensityControls,{config,onPatch:patch,rowCount:(attributes.rows||[]).length})
+    h(ChartDensityControls,{config,onPatch:patch,rowCount:rows.length})
   ),
   h(PanelBody,{title:__('Advanced analysis','native-tables-charts'),initialOpen:false},
     h(SelectControl,{label:__('X column','native-tables-charts'),value:String(config.xColumn??''),options:[{label:__('None','native-tables-charts'),value:''}].concat(colOptions(columns)),onChange:v=>patch({xColumn:v===''?null:Number(v)})}),
-    h(RangeControl,{label:__('Top N rows','native-tables-charts'),value:Number(config.topN||0),min:0,max:100,step:5,onChange:v=>patch({topN:v})}),
+	 h(RangeControl,{label:__('Top N rows','native-tables-charts'),value:Number(config.topN||0),min:0,max:100,step:5,onChange:v=>patch({topN:v})}),
+	 h(RangeControl,{label:__('Maximum rendered rows','native-tables-charts'),help:__('0 uses a safe automatic limit for the selected chart type. Larger datasets are sampled or truncated to protect page speed.','native-tables-charts'),value:Number(config.maxRenderRows||0),min:0,max:1000,step:25,onChange:v=>patch({maxRenderRows:v})}),
     Number(config.topN||0)>0&&h(TextControl,{label:__('Others label','native-tables-charts'),value:config.othersLabel||'',onChange:v=>patch({othersLabel:v})}),
     h(RefLineEditor,{config,onPatch:patch}),
     h(SeriesRulesEditor,{config,onPatch:patch,columns}),
@@ -657,9 +711,7 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
     dataMode==='disabled'&&h(Notice,{status:'warning',isDismissible:false},__('Disabling the alternate data table reduces accessibility. Use this only when the surrounding article provides the same information in another accessible form.','native-tables-charts'))
   ),
   h(PanelBody,{title:__('Schema','native-tables-charts'),initialOpen:false},
-    h(SelectControl,{label:__('Schema type','native-tables-charts'),value:config.schemaType||'off',options:[{label:__('Off','native-tables-charts'),value:'off'},{label:__('Dataset','native-tables-charts'),value:'dataset'},{label:__('Review','native-tables-charts'),value:'review'}],onChange:v=>patch({schemaType:v})}),
-    config.schemaType==='review'&&h(RangeControl,{label:__('Rating minimum','native-tables-charts'),value:Number(config.ratingMin||0),min:0,max:10,onChange:v=>patch({ratingMin:v})}),
-    config.schemaType==='review'&&h(RangeControl,{label:__('Rating maximum','native-tables-charts'),value:Number(config.ratingMax||5),min:1,max:100,onChange:v=>patch({ratingMax:v})})
+	    h(SchemaControls,{config,onPatch:patch,allowReview:true})
   ),
   h(PanelBody,{title:__('Layout & display','native-tables-charts'),initialOpen:false},
     h(SelectControl,{label:__('Aspect ratio','native-tables-charts'),value:config.aspectRatio||'auto',options:[{label:__('Automatic height','native-tables-charts'),value:'auto'},{label:'16:9',value:'16-9'},{label:'4:3',value:'4-3'},{label:__('Square','native-tables-charts'),value:'1-1'}],onChange:v=>patch({aspectRatio:v})}),
@@ -679,7 +731,7 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
 }
 
 function DataEditor({attributes,setAttributes,type,isSelected}){
- const columns=attributes.columns||defaultColumns();const rows=attributes.rows||defaultRows();
+ const columns=attributes.columns||defaultColumns();const shared=!!attributes.datasetId&&attributes.mode!=='inline';const [sharedRows,setSharedRows]=useState(null);const rows=shared?(sharedRows||[]):(attributes.rows||defaultRows());
  const widthMode=attributes.widthMode||(attributes.align==='wide'?'wide':attributes.align==='full'?'full':'content');
  const widthClass='ntc-width-'+widthMode+(widthMode==='wide'?' alignwide':widthMode==='full'?' alignfull':'');
  const blockProps=useBlockProps({className:'ntc-block-editor-root '+widthClass});
@@ -693,20 +745,20 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
  const toggleRowFocus=ri=>{if(type!=='chart')return;const label=String((rows[ri]||[])[labelColumn]??'').trim();if(!label){setStatus(__('Add a label before setting chart focus.','native-tables-charts'));return;}let next;if(focusValues.includes(label)){next=focusValues.filter(v=>v!==label);}else{next=allowMultipleFocus?focusValues.concat([label]):[label];}setAttributes({config:Object.assign({},attributes.config||{},{highlightValues:next})});setStatus(next.includes(label)?__('Chart focus updated','native-tables-charts'):__('Chart focus cleared','native-tables-charts'));};
  const updateFocusLabel=(oldLabel,newLabel)=>{if(type!=='chart'||!focusValues.includes(String(oldLabel)))return;const clean=String(newLabel||'').trim();const next=focusValues.map(v=>v===String(oldLabel)?clean:v).filter(Boolean);setAttributes({config:Object.assign({},attributes.config||{},{highlightValues:Array.from(new Set(next))})});};
  useEffect(()=>{latestRows.current=rows;},[rows]);
- useEffect(()=>{apiFetch({path:'/ntc/v1/presets'}).then(r=>setCustomPresets(r.custom||[])).catch(()=>{});},[]);
- useEffect(()=>{
-   if(!attributes.datasetId||attributes.mode==='inline')return;let cancelled=false;
+ useEffect(()=>{if(!presetsPromise)presetsPromise=apiFetch({path:'/ntc/v1/presets'});presetsPromise.then(r=>setCustomPresets(r.custom||[])).catch(()=>{presetsPromise=null;});},[]);
+	 useEffect(()=>{
+	   if(!attributes.datasetId||attributes.mode==='inline'||!isSelected)return;let cancelled=false;
    const loadKey=String(attributes.datasetId)+':'+String(attributes.viewId||0);if(skipRemoteLoad.current===loadKey){skipRemoteLoad.current='';return;}
    setLoading(true);loadingRemote.current=true;
    (async()=>{
      try{
        const next=await fetchReusableData(attributes.datasetId,attributes.viewId,type);if(cancelled)return;
-       setAttributes(next);latestRows.current=next.rows;setStatus(attributes.viewId?__('Loaded synced view','native-tables-charts'):__('Loaded reusable dataset','native-tables-charts'));
+	       setSharedRows(next.rows);setAttributes(Object.assign({},next,{rows:[]}));latestRows.current=next.rows;setStatus(attributes.viewId?__('Loaded synced view','native-tables-charts'):__('Loaded reusable dataset','native-tables-charts'));
      }catch(e){if(!cancelled)setStatus(__('Could not load reusable data','native-tables-charts'));}
      finally{if(!cancelled){setLoading(false);setTimeout(()=>{loadingRemote.current=false;},0);}}
    })();
    return()=>{cancelled=true;};
- },[attributes.datasetId,attributes.viewId]);
+	 },[attributes.datasetId,attributes.viewId,isSelected]);
 
  const saveShared=async()=>{
    if(!attributes.datasetId||attributes.mode==='inline')return;
@@ -716,12 +768,12 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
     if(needsReplace.current){
       needsReplace.current=false;dirtyRows.current.clear();
       await apiFetch({path:'/ntc/v1/datasets/'+attributes.datasetId+'/rows',method:'PUT',data:{replace:true,rows:[]}});
-      for(let i=0;i<data.length;i+=250)await apiFetch({path:'/ntc/v1/datasets/'+attributes.datasetId+'/rows',method:'PUT',data:{rows:data.slice(i,i+250),startIndex:i}});
+      for(let i=0;i<data.length;i+=1000)await apiFetch({path:'/ntc/v1/datasets/'+attributes.datasetId+'/rows',method:'PUT',data:{rows:data.slice(i,i+1000),startIndex:i}});
     }else if(dirtyRows.current.size){
       const indexed={};dirtyRows.current.forEach(i=>indexed[i]=data[i]||[]);dirtyRows.current.clear();
       await apiFetch({path:'/ntc/v1/datasets/'+attributes.datasetId+'/rows',method:'PATCH',data:{indexedRows:indexed}});
     }
-    setStatus(__('Dataset saved','native-tables-charts'));
+	    invalidateReusableCache(attributes.datasetId);setStatus(__('Dataset saved','native-tables-charts'));
    }catch(e){setStatus(__('Dataset save failed','native-tables-charts'));}
  };
  const scheduleSave=(ri,structural)=>{
@@ -729,8 +781,8 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
    if(structural){needsReplace.current=true;}else if(ri===null){(latestRows.current||[]).forEach((_,i)=>dirtyRows.current.add(i));}else dirtyRows.current.add(ri);
    clearTimeout(saveTimer.current);saveTimer.current=setTimeout(saveShared,1200);setStatus(__('Unsaved dataset changes','native-tables-charts'));
  };
- const setRows=(next,ri,structural=false)=>{latestRows.current=next;setAttributes({rows:next});scheduleSave(ri,structural);};
- const setColumns=next=>{setAttributes({columns:next});if(attributes.datasetId&&attributes.mode!=='inline'){setStatus(__('Saving columns…','native-tables-charts'));apiFetch({path:'/ntc/v1/datasets/'+attributes.datasetId,method:'PUT',data:{columns:next}}).then(()=>setStatus(__('Dataset saved','native-tables-charts'))).catch(()=>setStatus(__('Column save failed','native-tables-charts')));}};
+	 const setRows=(next,ri,structural=false)=>{latestRows.current=next;if(shared)setSharedRows(next);else setAttributes({rows:next});scheduleSave(ri,structural);};
+ const setColumns=next=>{setAttributes({columns:next});if(attributes.datasetId&&attributes.mode!=='inline'){setStatus(__('Saving columns…','native-tables-charts'));apiFetch({path:'/ntc/v1/datasets/'+attributes.datasetId,method:'PUT',data:{columns:next}}).then(()=>{invalidateReusableCache(attributes.datasetId);setStatus(__('Dataset saved','native-tables-charts'));}).catch(()=>setStatus(__('Column save failed','native-tables-charts')));}};
 
  const saveViewNow=()=>{
    if(!attributes.viewId||loadingRemote.current)return Promise.resolve();
@@ -770,26 +822,26 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
    try{
     const remote=await fetchReusableData(datasetId,viewId,type);const next=Object.assign({mode:viewId?'view':'dataset',datasetId,viewId},remote);
     if(type==='table'&&!viewId)next.cellMeta={};
-    skipRemoteLoad.current=String(datasetId)+':'+String(viewId);setAttributes(next);latestRows.current=remote.rows;setSelected({r:0,c:0});setStatus(viewId?__('Loaded synced view','native-tables-charts'):__('Loaded reusable dataset','native-tables-charts'));
+	    skipRemoteLoad.current=String(datasetId)+':'+String(viewId);setSharedRows(remote.rows);setAttributes(Object.assign({},next,{rows:[]}));latestRows.current=remote.rows;setSelected({r:0,c:0});setStatus(viewId?__('Loaded synced view','native-tables-charts'):__('Loaded reusable dataset','native-tables-charts'));
    }catch(e){setStatus(__('Could not load reusable data','native-tables-charts'));throw e;}
    finally{setLoading(false);setTimeout(()=>{loadingRemote.current=false;},0);}
  };
  const createDataset=async name=>{
    const d=await apiFetch({path:'/ntc/v1/datasets',method:'POST',data:{name,columns,rows:[]}});
-   for(let i=0;i<rows.length;i+=250)await apiFetch({path:'/ntc/v1/datasets/'+d.id+'/rows',method:'PUT',data:{rows:rows.slice(i,i+250),startIndex:i}});
+   for(let i=0;i<rows.length;i+=1000)await apiFetch({path:'/ntc/v1/datasets/'+d.id+'/rows',method:'PUT',data:{rows:rows.slice(i,i+1000),startIndex:i}});
    return Number(d.id);
  };
- const saveReusable=async()=>{const name=window.prompt(__('Dataset name','native-tables-charts'),type==='chart'?__('Benchmark Dataset','native-tables-charts'):__('Reusable Table Data','native-tables-charts'));if(!name)return;setStatus(__('Creating dataset…','native-tables-charts'));try{const id=await createDataset(name);setAttributes({mode:'dataset',datasetId:id,viewId:0});setStatus(__('Reusable dataset created','native-tables-charts'));}catch(e){setStatus(__('Could not create dataset','native-tables-charts'));}};
+	 const saveReusable=async()=>{const name=window.prompt(__('Dataset name','native-tables-charts'),type==='chart'?__('Benchmark Dataset','native-tables-charts'):__('Reusable Table Data','native-tables-charts'));if(!name)return;setStatus(__('Creating dataset…','native-tables-charts'));try{const id=await createDataset(name);setSharedRows(rows);latestRows.current=rows;setAttributes({mode:'dataset',datasetId:id,viewId:0,rows:[]});setStatus(__('Reusable dataset created','native-tables-charts'));}catch(e){setStatus(__('Could not create dataset','native-tables-charts'));}};
  const saveView=async()=>{
    if(attributes.viewId){await saveShared();await saveViewNow();return;}
    let datasetId=attributes.datasetId;
-   if(!datasetId){const name=window.prompt(__('Dataset name','native-tables-charts'),__('Reusable Dataset','native-tables-charts'));if(!name)return;datasetId=await createDataset(name);setAttributes({datasetId,mode:'dataset'});}else await saveShared();
+   if(!datasetId){const name=window.prompt(__('Dataset name','native-tables-charts'),__('Reusable Dataset','native-tables-charts'));if(!name)return;datasetId=await createDataset(name);setSharedRows(rows);latestRows.current=rows;setAttributes({datasetId,mode:'dataset',rows:[]});}else await saveShared();
    const vname=window.prompt(__('Synced view name','native-tables-charts'),type==='chart'?__('Reusable Chart','native-tables-charts'):__('Reusable Table','native-tables-charts'));if(!vname)return;
    const view=await apiFetch({path:'/ntc/v1/views',method:'POST',data:{dataset_id:datasetId,type,name:vname,config:Object.assign({},attributes.config||{},type==='table'?{cellMeta:attributes.cellMeta||{}}:{})}});
    setAttributes({mode:'view',viewId:Number(view.id),datasetId});setStatus(__('Synced view saved','native-tables-charts'));
  };
- const detach=()=>{clearTimeout(saveTimer.current);clearTimeout(viewTimer.current);setAttributes({mode:'inline',datasetId:0,viewId:0});setStatus(__('Detached as an inline copy','native-tables-charts'));};
- const savePreset=async()=>{const name=window.prompt(__('Preset name','native-tables-charts'));if(!name)return;await apiFetch({path:'/ntc/v1/presets',method:'POST',data:{type,name,settings:attributes.config||{}}});const all=await apiFetch({path:'/ntc/v1/presets'});setCustomPresets(all.custom||[]);setStatus(__('Preset saved','native-tables-charts'));};
+	 const detach=()=>{clearTimeout(saveTimer.current);clearTimeout(viewTimer.current);const copy=(latestRows.current||[]).map(row=>row.slice());setAttributes({mode:'inline',datasetId:0,viewId:0,rows:copy});setSharedRows(null);setStatus(__('Detached as an inline copy','native-tables-charts'));};
+ const savePreset=async()=>{const name=window.prompt(__('Preset name','native-tables-charts'));if(!name)return;await apiFetch({path:'/ntc/v1/presets',method:'POST',data:{type,name,settings:attributes.config||{}}});presetsPromise=apiFetch({path:'/ntc/v1/presets'});const all=await presetsPromise;setCustomPresets(all.custom||[]);setStatus(__('Preset saved','native-tables-charts'));};
 
 
  const metricCount=type==='chart'?(chartConfig.valueColumns||[]).length:columns.length;
@@ -856,7 +908,7 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
    rows.length>(CFG.maxInlineRows||250)&&attributes.mode==='inline'&&h('div',{className:'ntc-large-note'},__('This inline dataset is large. Save it as a reusable dataset for better post-editor performance.','native-tables-charts'))
  );
   const renderPreview=contentOnly=>h('div',{className:'ntc-chart-preview-shell'+(contentOnly?' is-content-only':'')},
-     SSR&&rows.length<=500?h('div',{className:'ntc-preview-viewport is-'+previewMode,style:{maxWidth:previewWidth}},h(SSR,{block:type==='chart'?'ntc/chart':'ntc/table',attributes,httpMethod:'POST'})):h('div',{className:'ntc-large-note'},__('In-editor rendering is disabled for datasets over 500 rows to keep Gutenberg fast. Use WordPress Preview to inspect the published layout.','native-tables-charts')),
+     SSR&&(shared||rows.length<=500)?h('div',{className:'ntc-preview-viewport is-'+previewMode,style:{maxWidth:previewWidth}},h(SSR,{block:type==='chart'?'ntc/chart':'ntc/table',attributes,httpMethod:'POST'})):h('div',{className:'ntc-large-note'},__('In-editor rendering is disabled for inline datasets over 500 rows to keep Gutenberg fast. Save the data as reusable or use WordPress Preview to inspect the published layout.','native-tables-charts')),
   );
  const widthMenu=h(DropdownMenu,{
    icon:widthMode==='full'?'fullscreen-alt':widthMode==='wide'?'align-wide':'align-center',
@@ -881,7 +933,7 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
   if(!isSelected)return h('div',blockProps,renderPreview(true));
 
  return h(wp.element.Fragment,null,
-   type==='table'?h(TableInspector,{attributes,setAttributes,selected,customPresets}):h(ChartInspector,{attributes,setAttributes,customPresets,onEditData:()=>setEditorMode('data'),onFocusData:()=>setFocusOpen(true)}),
+	   type==='table'?h(TableInspector,{attributes,setAttributes,selected,customPresets}):h(ChartInspector,{attributes,setAttributes,customPresets,rows,onEditData:()=>setEditorMode('data'),onFocusData:()=>setFocusOpen(true)}),
    h(InspectorControls,null,h(PanelBody,{title:__('Layout','native-tables-charts'),initialOpen:false},h(SelectControl,{label:__('Width','native-tables-charts'),value:widthMode,options:[{label:__('Content width','native-tables-charts'),value:'content'},{label:__('Wide width','native-tables-charts'),value:'wide'},{label:__('Full width','native-tables-charts'),value:'full'}],onChange:setWidthMode}),h('p',{className:'ntc-inspector-note'},__('Content width matches the normal article column. Wide and Full are deliberate breakout layouts.','native-tables-charts')))),
    h(StyleInspector,{type,attributes,setAttributes,customPresets}),
    blockControls,

@@ -4,6 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class NTC_Renderer {
 	private NTC_Repository $repo;
+	private array $request_cache = array();
 	public function __construct( NTC_Repository $repo ) {
 		$this->repo = $repo; }
 
@@ -32,7 +33,7 @@ final class NTC_Renderer {
 	}
 
 	public static function table_defaults(): array {
-		return array(
+		return array_merge( array(
 			'preset'                => 'editorial',
 			'showHeader'            => true,
 			'showCaption'           => false,
@@ -116,12 +117,13 @@ final class NTC_Renderer {
 			'rowsPerPage'           => 10,
 			'enableExport'          => false,
 			'enableSchema'          => false,
+			'schemaType'            => 'off',
 			'showUpdatedDate'       => false,
-		);
+		), self::schema_defaults() );
 	}
 
 	public static function chart_defaults(): array {
-		return array(
+		return array_merge( array(
 			'preset'                  => 'benchmark-dark',
 			'chartType'               => 'horizontal-bar',
 			'title'                   => '',
@@ -134,6 +136,7 @@ final class NTC_Renderer {
 			'labelColumn'             => 0,
 			'valueColumns'            => array( 1 ),
 			'topN'                    => 0,
+			'maxRenderRows'           => 0,
 			'othersLabel'             => 'Others',
 			'xColumn'                 => null,
 			'sortColumn'              => 1,
@@ -204,6 +207,38 @@ final class NTC_Renderer {
 			'darkMutedColor'          => '#9aa5b1',
 			'darkGridColor'           => '#2a3442',
 			'showUpdatedDate'         => false,
+		), self::schema_defaults() );
+	}
+
+	private static function schema_defaults(): array {
+		return array(
+			'schemaName'               => '',
+			'schemaDescription'        => '',
+			'schemaUrl'                => '',
+			'schemaIdentifier'         => '',
+			'schemaLicense'            => '',
+			'schemaCreatorName'        => '',
+			'schemaCreatorType'        => 'Person',
+			'schemaPublisherName'      => '',
+			'schemaKeywords'           => '',
+			'schemaTemporalCoverage'   => '',
+			'schemaSameAs'             => '',
+			'schemaDistributionUrl'    => '',
+			'schemaDistributionFormat' => 'text/csv',
+			'reviewItemName'           => '',
+			'reviewItemUrl'            => '',
+			'reviewItemImage'          => '',
+			'reviewBrand'              => '',
+			'reviewSku'                => '',
+			'reviewAuthorName'         => '',
+			'reviewPublisherName'      => '',
+			'reviewBody'               => '',
+			'reviewDatePublished'      => '',
+			'reviewDateModified'       => '',
+			'reviewPositiveNotes'      => '',
+			'reviewNegativeNotes'      => '',
+			'reviewUseAggregate'       => false,
+			'reviewRatingCount'        => 0,
 		);
 	}
 
@@ -588,7 +623,9 @@ final class NTC_Renderer {
 		$dataset_id = absint( $attributes['datasetId'] ?? 0 );
 		$view_id    = absint( $attributes['viewId'] ?? 0 );
 		if ( $view_id ) {
-			$view = $this->repo->get_view( $view_id );
+			$view_key = 'view:' . $view_id;
+			$view     = array_key_exists( $view_key, $this->request_cache ) ? $this->request_cache[ $view_key ] : $this->repo->get_view( $view_id );
+			$this->request_cache[ $view_key ] = $view;
 			if ( $view && $view['type'] === $type ) {
 				$dataset_id  = (int) $view['dataset_id'];
 				$view_config = (array) $view['config'];
@@ -601,10 +638,14 @@ final class NTC_Renderer {
 		$dataset_updated_at = null;
 		$dataset_name       = null;
 		if ( $dataset_id ) {
-			$dataset = $this->repo->get_dataset( $dataset_id, false );
+			$dataset_key = 'dataset:' . $dataset_id;
+			$dataset     = array_key_exists( $dataset_key, $this->request_cache ) ? $this->request_cache[ $dataset_key ] : $this->repo->get_dataset( $dataset_id, false );
+			$this->request_cache[ $dataset_key ] = $dataset;
 			if ( $dataset ) {
 				$columns = $dataset['columns'];
-				$source  = $this->repo->get_post_source( $dataset_id );
+				$source_key = 'source:' . $dataset_id;
+				$source     = array_key_exists( $source_key, $this->request_cache ) ? $this->request_cache[ $source_key ] : $this->repo->get_post_source( $dataset_id );
+				$this->request_cache[ $source_key ] = $source;
 				if ( $source && 'posts' === $source['source_mode'] ) {
 					$cache_key = 'ntc_post_source_' . $dataset_id . '_' . get_option( 'ntc_post_source_version', 0 );
 					$cache     = get_transient( $cache_key );
@@ -615,7 +656,9 @@ final class NTC_Renderer {
 						set_transient( $cache_key, $rows, 5 * MINUTE_IN_SECONDS );
 					}
 				} else {
-					$rows = $this->repo->get_rows( $dataset_id );
+					$rows_key = 'rows:' . $dataset_id;
+					$rows     = array_key_exists( $rows_key, $this->request_cache ) ? $this->request_cache[ $rows_key ] : $this->repo->get_rows( $dataset_id );
+					$this->request_cache[ $rows_key ] = $rows;
 				}
 				$dataset_updated_at = $dataset['updated_at'] ?? null;
 				$dataset_name       = $dataset['name'] ?? null;
@@ -631,9 +674,6 @@ final class NTC_Renderer {
 		if ( 'off' === $schema_type ) {
 			return ''; }
 		if ( 'review' === $schema_type ) {
-			$name = (string) ( $config['title'] ?? '' );
-			if ( '' === $name ) {
-				return ''; }
 			$v     = absint( $config['valueColumns'][0] ?? 1 );
 			$focus = (array) ( $config['highlightValues'] ?? array() );
 			$row   = array();
@@ -648,44 +688,91 @@ final class NTC_Renderer {
 			}
 			if ( ! $row && $rows ) {
 				$row = $rows[0]; }
-			$best    = (float) max( 1, (float) ( $config['ratingMax'] ?? 10 ) );
-			$rating  = $row ? min( (float) NTC_Formulas::numeric( $row[ $v ] ?? 0 ), $best ) : 0.0;
-			$payload = array(
-				'@context' => 'https://schema.org',
-				'@graph'   => array(
-					array(
-						'@type'           => 'Product',
-						'name'            => esc_html( $name ),
-						'review'          => array(
-							'@type'        => 'Review',
-							'reviewBody'   => esc_html( (string) ( $config['subtitle'] ?? '' ) ),
-							'reviewRating' => array(
-								'@type'       => 'Rating',
-								'ratingValue' => $rating,
-								'bestRating'  => $best,
-								'worstRating' => (float) ( $config['ratingMin'] ?? 0 ),
-							),
-						),
-						'aggregateRating' => array(
-							'@type'       => 'AggregateRating',
-							'ratingValue' => $rating,
-							'bestRating'  => $best,
-							'worstRating' => (float) ( $config['ratingMin'] ?? 0 ),
-							'ratingCount' => 1,
-						),
-					),
+			$label_column = absint( $config['labelColumn'] ?? 0 );
+			$item_name    = $this->schema_text( $config['reviewItemName'] ?? '' );
+			if ( '' === $item_name ) {
+				$item_name = $this->schema_text( $row[ $label_column ] ?? '' ); }
+			$author       = $this->schema_text( $config['reviewAuthorName'] ?? '' );
+			if ( '' === $author ) {
+				$author = $this->schema_post_author(); }
+			$body = $this->schema_text( $config['reviewBody'] ?? '' );
+			if ( '' === $body ) {
+				$body = $this->schema_text( $config['subtitle'] ?? '' ); }
+			if ( '' === $item_name || '' === $author || ! $row || '' === $body ) {
+				return ''; }
+			$best   = (float) max( 1, (float) ( $config['ratingMax'] ?? 10 ) );
+			$worst  = (float) min( $best - 0.01, (float) ( $config['ratingMin'] ?? 0 ) );
+			$rating = max( $worst, min( (float) NTC_Formulas::numeric( $row[ $v ] ?? 0 ), $best ) );
+			$url    = $this->schema_url( $config['reviewItemUrl'] ?? '' );
+			$image  = $this->schema_url( $config['reviewItemImage'] ?? '' );
+			$product = array(
+				'@type' => 'Product',
+				'name'  => $item_name,
+			);
+			if ( $url ) {
+				$product['url'] = $url; }
+			if ( $image ) {
+				$product['image'] = $image; }
+			if ( '' !== $this->schema_text( $config['reviewBrand'] ?? '' ) ) {
+				$product['brand'] = array( '@type' => 'Brand', 'name' => $this->schema_text( $config['reviewBrand'] ) ); }
+			if ( '' !== $this->schema_text( $config['reviewSku'] ?? '' ) ) {
+				$product['sku'] = $this->schema_text( $config['reviewSku'] ); }
+			$count = absint( $config['reviewRatingCount'] ?? 0 );
+			if ( ! empty( $config['reviewUseAggregate'] ) && $count > 1 ) {
+				$product['aggregateRating'] = array(
+					'@type'       => 'AggregateRating',
+					'ratingValue' => $rating,
+					'bestRating'  => $best,
+					'worstRating' => $worst,
+					'ratingCount' => $count,
+				); }
+			$canonical = $this->schema_url( $config['schemaUrl'] ?? '' ) ?: $this->schema_permalink();
+			$payload   = array(
+				'@context'       => 'https://schema.org',
+				'@type'          => 'Review',
+				'itemReviewed'   => $product,
+				'author'         => array( '@type' => 'Person', 'name' => $author ),
+				'reviewBody'     => $body,
+				'reviewRating'   => array(
+					'@type'       => 'Rating',
+					'ratingValue' => $rating,
+					'bestRating'  => $best,
+					'worstRating' => $worst,
 				),
 			);
-			return '<script type="application/ld+json">' . wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '</script>';
+			if ( $canonical ) {
+				$payload['@id']              = $canonical . '#ntc-review-' . (int) ( $data['view_id'] ?: $data['dataset_id'] ?: 1 );
+				$payload['mainEntityOfPage'] = $canonical; }
+			$publisher = $this->schema_text( $config['reviewPublisherName'] ?? '' );
+			if ( '' === $publisher && function_exists( 'get_bloginfo' ) ) {
+				$publisher = $this->schema_text( get_bloginfo( 'name' ) ); }
+			if ( $publisher ) {
+				$payload['publisher'] = array( '@type' => 'Organization', 'name' => $publisher ); }
+			$published = $this->schema_date( $config['reviewDatePublished'] ?? '' );
+			$modified  = $this->schema_date( $config['reviewDateModified'] ?? ( $data['dataset_updated_at'] ?? '' ) );
+			if ( $published ) {
+				$payload['datePublished'] = $published; }
+			if ( $modified ) {
+				$payload['dateModified'] = $modified; }
+			$positive = $this->schema_item_list( $config['reviewPositiveNotes'] ?? '' );
+			$negative = $this->schema_item_list( $config['reviewNegativeNotes'] ?? '' );
+			if ( $positive ) {
+				$payload['positiveNotes'] = $positive; }
+			if ( $negative ) {
+				$payload['negativeNotes'] = $negative; }
+			return $this->schema_script( $payload, $data, $config );
 		}
 		if ( 'dataset' !== $schema_type ) {
 			return ''; }
-		$name = (string) ( $config['title'] ?? '' );
+		$name = $this->schema_text( $config['schemaName'] ?? '' );
 		if ( '' === $name ) {
-			$name = (string) ( $config['caption'] ?? '' ); }
+			$name = $this->schema_text( $config['title'] ?? '' ); }
+		if ( '' === $name ) {
+			$name = $this->schema_text( $config['caption'] ?? '' ); }
 		if ( '' === $name && ! empty( $data['dataset_name'] ) ) {
-			$name = (string) $data['dataset_name']; }
-		if ( '' === $name ) {
+			$name = $this->schema_text( $data['dataset_name'] ); }
+		$description = $this->schema_text( $config['schemaDescription'] ?? ( $config['subtitle'] ?? '' ) );
+		if ( '' === $name || strlen( $description ) < 50 || strlen( $description ) > 5000 ) {
 			return ''; }
 		$date = $data['dataset_updated_at'] ?? '';
 		if ( '' === $date ) {
@@ -693,27 +780,111 @@ final class NTC_Renderer {
 			$date = $post ? get_post_modified_time( 'c', true, $post ) : '';
 		}
 		$variables  = array();
-		$value_cols = array_map( 'absint', (array) ( $config['valueColumns'] ?? array() ) );
+		$value_cols = array_map( 'absint', (array) ( $config['valueColumns'] ?? array_keys( $columns ) ) );
 		foreach ( $value_cols as $v ) {
 			$col = $columns[ $v ] ?? null;
 			if ( ! $col || in_array( (string) ( $col['type'] ?? 'auto' ), array( 'text', 'url', 'sparkline', 'delta' ), true ) ) {
 				continue; }
 			$variables[] = array(
 				'@type'    => 'PropertyValue',
-				'name'     => esc_html( $col['label'] ?? '' ),
-				'unitText' => esc_html( $col['unit'] ?? '' ),
+				'name'     => $this->schema_text( $col['label'] ?? '' ),
+				'unitText' => $this->schema_text( $col['unit'] ?? '' ),
 			);
+			if ( '' === $variables[ array_key_last( $variables ) ]['unitText'] ) {
+				unset( $variables[ array_key_last( $variables ) ]['unitText'] ); }
 		}
+		$canonical = $this->schema_url( $config['schemaUrl'] ?? '' ) ?: $this->schema_permalink();
 		$payload = array(
 			'@context'     => 'https://schema.org',
 			'@type'        => 'Dataset',
-			'name'         => esc_html( $name ),
-			'description'  => esc_html( (string) ( $config['subtitle'] ?? '' ) ),
-			'dateModified' => esc_html( (string) $date ),
+			'name'         => $name,
+			'description'  => $description,
 		);
+		if ( $canonical ) {
+			$payload['@id'] = $canonical . '#ntc-dataset-' . (int) ( $data['dataset_id'] ?: $data['view_id'] ?: 1 );
+			$payload['url'] = $canonical; }
+		$modified = $this->schema_date( $date );
+		if ( $modified ) {
+			$payload['dateModified'] = $modified; }
+		$identifier = $this->schema_text( $config['schemaIdentifier'] ?? '' );
+		if ( $identifier ) {
+			$payload['identifier'] = $identifier; }
+		foreach ( array( 'schemaLicense' => 'license', 'schemaSameAs' => 'sameAs' ) as $key => $property ) {
+			$value = $this->schema_url( $config[ $key ] ?? '' );
+			if ( $value ) {
+				$payload[ $property ] = $value; }
+		}
+		$creator = $this->schema_text( $config['schemaCreatorName'] ?? '' ) ?: $this->schema_post_author();
+		if ( $creator ) {
+			$payload['creator'] = array( '@type' => 'Organization' === ( $config['schemaCreatorType'] ?? '' ) ? 'Organization' : 'Person', 'name' => $creator ); }
+		$publisher = $this->schema_text( $config['schemaPublisherName'] ?? '' );
+		if ( '' === $publisher && function_exists( 'get_bloginfo' ) ) {
+			$publisher = $this->schema_text( get_bloginfo( 'name' ) ); }
+		if ( $publisher ) {
+			$payload['publisher'] = array( '@type' => 'Organization', 'name' => $publisher ); }
+		$keywords = $this->schema_lines( $config['schemaKeywords'] ?? '' );
+		if ( $keywords ) {
+			$payload['keywords'] = $keywords; }
+		$temporal = $this->schema_text( $config['schemaTemporalCoverage'] ?? '' );
+		if ( $temporal ) {
+			$payload['temporalCoverage'] = $temporal; }
+		$distribution = $this->schema_url( $config['schemaDistributionUrl'] ?? '' );
+		if ( $distribution ) {
+			$payload['distribution'] = array(
+				'@type'         => 'DataDownload',
+				'contentUrl'    => $distribution,
+				'encodingFormat' => $this->schema_text( $config['schemaDistributionFormat'] ?? 'text/csv' ),
+			); }
 		if ( $variables ) {
 			$payload['variableMeasured'] = $variables; }
-		return '<script type="application/ld+json">' . wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '</script>';
+		return $this->schema_script( $payload, $data, $config );
+	}
+
+	private function schema_script( array $payload, array $data, array $config ): string {
+		if ( function_exists( 'apply_filters' ) ) {
+			$payload = (array) apply_filters( 'ntc_schema_payload', $payload, $data, $config ); }
+		return '<script type="application/ld+json">' . wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP ) . '</script>';
+	}
+
+	private function schema_text( $value ): string {
+		$value = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( (string) $value, true ) : strip_tags( (string) $value );
+		return trim( preg_replace( '/\s+/u', ' ', $value ) );
+	}
+
+	private function schema_url( $value ): string {
+		$value = trim( (string) $value );
+		return preg_match( '#^https?://#i', $value ) ? $value : '';
+	}
+
+	private function schema_permalink(): string {
+		return function_exists( 'get_permalink' ) ? $this->schema_url( get_permalink() ) : '';
+	}
+
+	private function schema_post_author(): string {
+		$post = function_exists( 'get_post' ) ? get_post() : null;
+		return $post && function_exists( 'get_the_author_meta' ) ? $this->schema_text( get_the_author_meta( 'display_name', $post->post_author ) ) : '';
+	}
+
+	private function schema_date( $value ): string {
+		$value = trim( (string) $value );
+		if ( '' === $value ) {
+			return ''; }
+		$time = strtotime( $value . ( false === strpos( $value, 'T' ) ? ' UTC' : '' ) );
+		return false === $time ? '' : gmdate( 'c', $time );
+	}
+
+	private function schema_lines( $value ): array {
+		return array_values( array_filter( array_map( array( $this, 'schema_text' ), preg_split( '/[\r\n,]+/', (string) $value ) ) ) );
+	}
+
+	private function schema_item_list( $value ): array {
+		$items = $this->schema_lines( $value );
+		if ( ! $items ) {
+			return array(); }
+		return array(
+			'@type'           => 'ItemList',
+			'itemListElement' => array_map( static fn( $item, $index ) => array( '@type' => 'ListItem', 'position' => $index + 1, 'name' => $item ), $items, array_keys( $items ) ),
+		);
 	}
 
 	private function updated_date_html( array $config, array $data ): string {
@@ -787,7 +958,27 @@ final class NTC_Renderer {
 		}if ( (int) $config['containerWidth'] > 0 ) {
 			$scroll_styles[] = 'max-width:' . absint( $config['containerWidth'] ) . 'px';
 		}$out .= '<div class="ntc-table-scroll"' . ( $scroll_styles ? ' style="' . esc_attr( implode( ';', $scroll_styles ) ) . '"' : '' ) . '>';
-		$out  .= '<table class="ntc-table" data-sortable="' . ( ! empty( $config['enableSorting'] ) ? '1' : '0' ) . '" data-update-position="' . ( ! empty( $config['updatePositionOnSort'] ) ? '1' : '0' ) . '">';
+		$progressive = ( ! empty( $config['enablePagination'] ) || count( $rows ) > 500 ) && ! $this->table_has_spans( $cell_meta );
+		$page_size   = ! empty( $config['enablePagination'] ) ? max( 1, min( 500, absint( $config['rowsPerPage'] ?? 10 ) ) ) : 100;
+		$records     = array();
+		if ( $progressive ) {
+			foreach ( $rows as $ri => $row ) {
+				$record_cells = array();
+				$record_sort  = array();
+				foreach ( $columns as $ci => $column ) {
+					$value          = $row[ $ci ] ?? '';
+					$record_cells[] = $this->schema_text( $value );
+					$record_sort[]  = $this->sort_value( $value, $config['columnTypes'][ $ci ] ?? ( $column['type'] ?? 'auto' ), $column['format'] ?? '', $config['numberFormat'] ?? 'us' );
+				}
+				$record = array( 'html' => $this->table_rows_html( array( $row ), $columns, $cell_meta, $config, $heat, $ri ) );
+				if ( ! empty( $config['enableSearch'] ) || ! empty( $config['enableExport'] ) ) {
+					$record['cells'] = $record_cells; }
+				if ( ! empty( $config['enableSorting'] ) && ! empty( $config['enableManualSorting'] ) ) {
+					$record['sort'] = $record_sort; }
+				$records[] = $record;
+			}
+		}
+		$out  .= '<table class="ntc-table" data-sortable="' . ( ! empty( $config['enableSorting'] ) ? '1' : '0' ) . '" data-update-position="' . ( ! empty( $config['updatePositionOnSort'] ) ? '1' : '0' ) . '" data-progressive="' . ( $progressive ? '1' : '0' ) . '">';
 		if ( ! empty( $config['showCaption'] ) && '' !== (string) $config['caption'] ) {
 			$out .= '<caption style="caption-side:' . ( 'bottom' === $config['captionSide'] ? 'bottom' : 'top' ) . '">' . wp_kses_post( $config['caption'] ) . '</caption>';}
 		if ( ! empty( $config['showHeader'] ) ) {
@@ -827,24 +1018,51 @@ final class NTC_Renderer {
 			$out .= '</tr></thead>';
 		}
 		$out .= '<tbody>';
+		$out .= $progressive ? implode( '', array_column( array_slice( $records, 0, $page_size ), 'html' ) ) : $this->table_rows_html( $rows, $columns, $cell_meta, $config, $heat );
+		$out .= '</tbody></table></div>';
+		if ( $progressive ) {
+			$out .= '<script type="application/json" class="ntc-table-data">' . wp_json_encode( $records ) . '</script>';
+		}
+		if ( ! empty( $config['enablePagination'] ) || $progressive ) {
+			$hidden = count( $rows ) <= $page_size ? ' is-hidden' : '';
+			$out   .= '<div class="ntc-table-pager' . $hidden . '" data-page-size="' . $page_size . '"><button type="button" class="ntc-pager-prev" aria-label="' . esc_attr__( 'Previous page', 'native-tables-charts' ) . '">‹</button><span class="ntc-pager-label">1 / ' . max( 1, (int) ceil( count( $rows ) / $page_size ) ) . '</span><button type="button" class="ntc-pager-next" aria-label="' . esc_attr__( 'Next page', 'native-tables-charts' ) . '">›</button></div>';
+		}
+		$out .= $this->updated_date_html( $config, $data );
+		$out .= '</div>' . $this->schema_json( $data, $config, $columns );
+		if ( $progressive || ! empty( $config['enableSorting'] ) && ! empty( $config['enableManualSorting'] ) || ! empty( $config['enableSearch'] ) || ! empty( $config['enablePagination'] ) || ! empty( $config['enableExport'] ) ) {
+			wp_enqueue_script( 'ntc-frontend' ); }
+		return $out;
+	}
+
+	private function table_has_spans( array $cell_meta ): bool {
+		foreach ( $cell_meta as $meta ) {
+			if ( is_array( $meta ) && ( absint( $meta['rowspan'] ?? $meta['rowSlots'] ?? 1 ) > 1 || absint( $meta['colspan'] ?? $meta['columnSlots'] ?? 1 ) > 1 ) ) {
+				return true; }
+		}
+		return false;
+	}
+
+	private function table_rows_html( array $rows, array $columns, array $cell_meta, array $config, array $heat, int $position_offset = 0 ): string {
+		$out  = '';
 		$skip = array();
-		foreach ( $rows as $ri => $row ) {
+		foreach ( $rows as $local_ri => $row ) {
+			$ri      = $position_offset + $local_ri;
 			$meta_ri = isset( $row['_ntc_index'] ) ? (int) $row['_ntc_index'] : $ri;
 			$out    .= '<tr data-original-index="' . esc_attr( $meta_ri ) . '">';
 			if ( ! empty( $config['showPosition'] ) && 'left' === $config['positionSide'] ) {
-				$out .= '<th scope="row" class="ntc-position">' . esc_html( $ri + 1 ) . '</th>';}
+				$out .= '<th scope="row" class="ntc-position">' . esc_html( $ri + 1 ) . '</th>'; }
 			foreach ( $columns as $ci => $col ) {
-				if ( isset( $skip[ $ri ][ $ci ] ) ) {
-					continue;}
+				if ( isset( $skip[ $local_ri ][ $ci ] ) ) {
+					continue; }
 				$meta    = is_array( $cell_meta[ $meta_ri . ':' . $ci ] ?? null ) ? $cell_meta[ $meta_ri . ':' . $ci ] : array();
 				$rowspan = ! empty( $config['enableSorting'] ) ? 1 : max( 1, absint( $meta['rowspan'] ?? $meta['rowSlots'] ?? 1 ) );
 				$colspan = ! empty( $config['enableSorting'] ) ? 1 : max( 1, absint( $meta['colspan'] ?? $meta['columnSlots'] ?? 1 ) );
 				if ( $rowspan > 1 || $colspan > 1 ) {
-					for ( $rr = $ri;$rr < $ri + $rowspan;$rr++ ) {
-						for ( $cc = $ci;$cc < $ci + $colspan;$cc++ ) {
-							if ( $rr === $ri && $cc === $ci ) {
-											continue;
-							}$skip[ $rr ][ $cc ] = true;}
+					for ( $rr = $local_ri; $rr < $local_ri + $rowspan; $rr++ ) {
+						for ( $cc = $ci; $cc < $ci + $colspan; $cc++ ) {
+							if ( $rr !== $local_ri || $cc !== $ci ) {
+								$skip[ $rr ][ $cc ] = true; }
+						}
 					}
 				}
 				$value       = $row[ $ci ] ?? '';
@@ -854,34 +1072,24 @@ final class NTC_Renderer {
 					foreach ( (array) ( $config['defaultSort'] ?? array() ) as $sort_rule ) {
 						if ( absint( $sort_rule['column'] ?? -1 ) === $ci && ! empty( $sort_rule['dateFormat'] ) ) {
 							$date_format = (string) $sort_rule['dateFormat'];
-							break;}
+							break; }
 					}
 				}
 				$sort  = $this->sort_value( $value, $type, $date_format, $config['numberFormat'] ?? 'us' );
-				$style = $this->cell_style( $meta, $config, $ri, $ci, $row[ $ci ] ?? '', $heat );
+				$style = $this->cell_style( $meta, $config, $ri, $ci, $value, $heat );
 				$attrs = ' data-label="' . esc_attr( $col['label'] ?? '' ) . '" data-sort="' . esc_attr( $sort ) . '"';
 				if ( $rowspan > 1 ) {
-					$attrs .= ' rowspan="' . $rowspan . '"';
-				}if ( $colspan > 1 ) {
-					$attrs .= ' colspan="' . $colspan . '"';}
+					$attrs .= ' rowspan="' . $rowspan . '"'; }
+				if ( $colspan > 1 ) {
+					$attrs .= ' colspan="' . $colspan . '"'; }
 				if ( $style ) {
-					$attrs .= ' style="' . esc_attr( $style ) . '"';}
+					$attrs .= ' style="' . esc_attr( $style ) . '"'; }
 				$out .= '<td' . $attrs . '>' . $this->render_cell( $value, $meta, $config, false, $type ) . '</td>';
 			}
 			if ( ! empty( $config['showPosition'] ) && 'right' === $config['positionSide'] ) {
-				$out .= '<th scope="row" class="ntc-position">' . esc_html( $ri + 1 ) . '</th>';}
+				$out .= '<th scope="row" class="ntc-position">' . esc_html( $ri + 1 ) . '</th>'; }
 			$out .= '</tr>';
 		}
-		$out .= '</tbody></table></div>';
-		if ( ! empty( $config['enablePagination'] ) ) {
-			$size   = max( 1, min( 500, absint( $config['rowsPerPage'] ?? 10 ) ) );
-			$hidden = count( $rows ) <= $size ? ' is-hidden' : '';
-			$out   .= '<div class="ntc-table-pager' . $hidden . '" data-page-size="' . $size . '"><button type="button" class="ntc-pager-prev" aria-label="' . esc_attr__( 'Previous page', 'native-tables-charts' ) . '">‹</button><span class="ntc-pager-label">1 / ' . max( 1, (int) ceil( count( $rows ) / $size ) ) . '</span><button type="button" class="ntc-pager-next" aria-label="' . esc_attr__( 'Next page', 'native-tables-charts' ) . '">›</button></div>';
-		}
-		$out .= $this->updated_date_html( $config, $data );
-		$out .= '</div>' . $this->schema_json( $data, $config, $columns );
-		if ( ! empty( $config['enableSorting'] ) && ! empty( $config['enableManualSorting'] ) || ! empty( $config['enableSearch'] ) || ! empty( $config['enablePagination'] ) || ! empty( $config['enableExport'] ) ) {
-			wp_enqueue_script( 'ntc-frontend' ); }
 		return $out;
 	}
 
@@ -1345,6 +1553,7 @@ final class NTC_Renderer {
 			}$wc = 'ntc-empty ntc-width-' . $wm . ( 'wide' === $wm ? ' alignwide' : ( 'full' === $wm ? ' alignfull' : '' ) );
 			return '<div ' . get_block_wrapper_attributes( array( 'class' => $wc ) ) . '>' . esc_html__( 'Add data to display this chart.', 'native-tables-charts' ) . '</div>';}
 		$id         = wp_unique_id( 'ntc-chart-' );
+		$row_total  = count( $rows );
 		$chart_rows = $this->prepare_chart_rows( $rows, $columns, $config );
 		$config     = $this->apply_chart_presentation( $config, count( $chart_rows ) );
 		$type       = sanitize_key( $config['chartType'] );
@@ -1473,6 +1682,10 @@ final class NTC_Renderer {
 				break;
 		}
 		$out .= '</div>';
+		if ( count( $chart_rows ) < $row_total ) {
+			/* translators: 1: rendered row count, 2: total row count. */
+			$out .= '<p class="ntc-chart-limit-note">' . esc_html( sprintf( __( 'Showing %1$d of %2$d data rows for a responsive chart.', 'native-tables-charts' ), count( $chart_rows ), $row_total ) ) . '</p>';
+		}
 		if ( ! empty( $config['axisLabel'] ) ) {
 			$out .= '<div class="ntc-chart-axis-label">' . esc_html( $config['axisLabel'] ) . '</div>';}
 		$updated_line = $this->updated_date_html( $config, $data );
@@ -1501,8 +1714,9 @@ final class NTC_Renderer {
 			$out .= '<div class="ntc-chart-tools"><button type="button" class="ntc-export-btn" data-format="csv">' . esc_html__( 'Download CSV', 'native-tables-charts' ) . '</button>' . ( $png ? '<button type="button" class="ntc-export-btn" data-format="png">' . esc_html__( 'Download PNG', 'native-tables-charts' ) . '</button>' : '' ) . '</div>';
 			if ( 'disabled' === $data_mode ) {
 				$out .= '<div class="ntc-chart-export-data ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';}
-			wp_enqueue_script( 'ntc-frontend' );
 		}
+		if ( ! empty( $config['enableExport'] ) || ! empty( $config['enableTooltips'] ) || ! empty( $config['legendToggles'] ) || ! empty( $config['enableBrush'] ) ) {
+			wp_enqueue_script( 'ntc-frontend' ); }
 		$out .= '</figure>' . $this->schema_json( $data, $config, $columns, $chart_rows );
 		return $out;
 	}
@@ -1540,6 +1754,29 @@ final class NTC_Renderer {
 				$kept[] = $agg;
 			}
 			$rows = $kept;
+		}
+		$explicit = max( 0, min( 1000, (int) ( $c['maxRenderRows'] ?? 0 ) ) );
+		$type     = sanitize_key( (string) ( $c['chartType'] ?? 'horizontal-bar' ) );
+		$limit    = $explicit;
+		if ( 0 === $limit ) {
+			if ( in_array( $type, array( 'line', 'scatter', 'area', 'combo', 'bubble', 'timeline', 'slope', 'candlestick', 'error-bar', 'calendar-heatmap', 'streamgraph' ), true ) ) {
+				$limit = 500;
+			} elseif ( in_array( $type, array( 'horizontal-bar', 'vertical-bar', 'grouped-bar', 'stacked-bar', 'donut', 'radar', 'gauge', 'funnel', 'pareto', 'polar-area', 'small-multiples' ), true ) ) {
+				$limit = 100;
+			} else {
+				$limit = 200;
+			}
+		}
+		if ( count( $rows ) > $limit ) {
+			if ( in_array( $type, array( 'line', 'scatter', 'area', 'combo', 'bubble', 'timeline', 'slope', 'candlestick', 'error-bar', 'calendar-heatmap', 'streamgraph' ), true ) ) {
+				$sampled = array();
+				$last    = count( $rows ) - 1;
+				for ( $i = 0; $i < $limit; $i++ ) {
+					$sampled[] = $rows[ (int) round( $i * $last / max( 1, $limit - 1 ) ) ]; }
+				$rows = $sampled;
+			} else {
+				$rows = array_slice( $rows, 0, $limit );
+			}
 		}
 		return $rows;
 	}

@@ -76,6 +76,10 @@ final class NTC_REST {
 							'sanitize_callback' => 'absint',
 							'default'           => 0,
 						),
+						'include_total' => array(
+							'sanitize_callback' => 'rest_sanitize_boolean',
+							'default'           => true,
+						),
 					),
 				),
 				array(
@@ -211,6 +215,8 @@ final class NTC_REST {
 	}
 	public function dataset_get( WP_REST_Request $r ) {
 		$d = $this->repo->get_dataset( (int) $r['id'], false );
+		if ( $d ) {
+			$d['row_count'] = $this->repo->row_count( (int) $r['id'] ); }
 		return $d ? rest_ensure_response( $d ) : new WP_Error( 'ntc_not_found', __( 'Dataset not found.', 'native-tables-charts' ), array( 'status' => 404 ) );}
 	public function dataset_update( WP_REST_Request $r ) {
 		$ok = $this->repo->update_dataset( (int) $r['id'], (array) $r->get_json_params() );
@@ -221,12 +227,10 @@ final class NTC_REST {
 		$id     = (int) $r['id'];
 		$limit  = (int) ( ! empty( $r['limit'] ) ? $r['limit'] : 0 );
 		$offset = (int) ( ! empty( $r['offset'] ) ? $r['offset'] : 0 );
-		return rest_ensure_response(
-			array(
-				'rows'  => $this->repo->get_rows( $id, $limit, $offset ),
-				'total' => $this->repo->row_count( $id ),
-			)
-		);}
+		$response = array( 'rows' => $this->repo->get_rows( $id, $limit, $offset ) );
+		if ( ! isset( $r['include_total'] ) || rest_sanitize_boolean( $r['include_total'] ) ) {
+			$response['total'] = $this->repo->row_count( $id ); }
+		return rest_ensure_response( $response );}
 	public function rows_save( WP_REST_Request $r ) {
 		$p  = (array) $r->get_json_params();
 		$id = (int) $r['id'];

@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 3.0.8
+Stable tag: 3.0.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -184,6 +184,15 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 3.0.9 =
+* Added progressive large-table rendering so only one page of rows is mounted in the browser at a time.
+* Added chart-type-aware render limits, evenly sampled trend data, and an explicit maximum-row control.
+* Reduced Gutenberg data duplication with shared reusable-dataset caches, larger REST chunks, and lightweight saved block attributes.
+* Reused dataset, view, source, and row reads within each frontend request and reduced unnecessary post-source cache invalidation.
+* Reworked League Table detection into resumable 100-post requests and reduced migration work to five identified posts per request.
+* Added complete opt-in Dataset and Review JSON-LD controls with validation, provenance, licensing, distribution, product, author, publisher, dates, pros/cons, and safe aggregate-rating rules.
+* Prevented incomplete structured data from being emitted and added the `ntc_schema_payload` integration filter.
 
 = 3.0.8 =
 * Fixed a React lifecycle error that could crash Gutenberg after opening or closing the existing-data picker.

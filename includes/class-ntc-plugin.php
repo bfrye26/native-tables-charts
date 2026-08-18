@@ -25,9 +25,10 @@ final class NTC_Plugin {
 		add_action( 'admin_menu', array( $this->admin, 'register_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this->admin, 'admin_assets' ) );
 		add_action( 'admin_init', array( $this->admin, 'handle_actions' ) );
+		add_action( 'wp_ajax_ntc_migration_detect', array( $this->admin, 'migration_detect_ajax' ) );
 		add_filter( 'block_categories_all', array( $this, 'block_category' ), 10, 2 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'register_frontend_assets' ), 1 );
-		add_action( 'save_post', array( $this, 'invalidate_usage_cache' ) );
+		add_action( 'save_post', array( $this, 'invalidate_usage_cache' ), 10, 2 );
 		add_shortcode( 'ntc_dataset', array( $this, 'shortcode_dataset' ) );
 	}
 
@@ -124,9 +125,20 @@ final class NTC_Plugin {
 			)
 		);
 	}
-	public function invalidate_usage_cache(): void {
+	public function invalidate_usage_cache( int $post_id = 0, ?WP_Post $post = null ): void {
+		if ( $post_id < 1 ) {
+			delete_transient( 'ntc_dataset_usage_counts' );
+			update_option( 'ntc_post_source_version', (int) get_option( 'ntc_post_source_version', 0 ) + 1 );
+			return; }
+		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
+			return; }
+		$post = $post ?: get_post( $post_id );
+		if ( ! $post ) {
+			return; }
 		delete_transient( 'ntc_dataset_usage_counts' );
-		update_option( 'ntc_post_source_version', (int) get_option( 'ntc_post_source_version', 0 ) + 1 ); }
+		if ( $this->repo->has_post_source_for_type( (string) $post->post_type ) ) {
+			update_option( 'ntc_post_source_version', (int) get_option( 'ntc_post_source_version', 0 ) + 1 ); }
+	}
 	public function block_category( array $categories, $context ): array {
 		array_unshift(
 			$categories,
