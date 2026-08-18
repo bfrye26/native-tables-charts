@@ -165,10 +165,16 @@ function update_option( $option, $value, $autoload = null ) {
 		$GLOBALS['fake_options'][ $option ] = $value;
 	}
 	return true; }
+function delete_option( $option ) {
+	unset( $GLOBALS['fake_options'][ $option ] );
+	return true; }
 function sanitize_textarea_field( $str ) {
 	return (string) $str; }
 function wp_update_post( $postarr = array(), $wp_error = false ) {
+	$GLOBALS['wp_update_post_calls'] = (int) ( $GLOBALS['wp_update_post_calls'] ?? 0 ) + 1;
 	return 1; }
+function clean_post_cache( $post_id ) {
+	$GLOBALS['cleaned_post_ids'][] = (int) $post_id; }
 function delete_transient( $transient ) {
 	unset( $GLOBALS['fake_transients'][ $transient ] );
 	return true; }
@@ -212,8 +218,14 @@ $GLOBALS['wpdb'] = new class() {
 		}
 		return null; }
 	public function get_row( $q, $o = 'OBJECT' ) {
+		if ( false !== strpos( $q, 'dalt_data' ) && isset( $GLOBALS['fake_legacy_header'] ) ) {
+			return $GLOBALS['fake_legacy_header'];
+		}
 		if ( false !== strpos( $q, 'source_mode' ) && isset( $GLOBALS['fake_post_source'] ) ) {
 			return $GLOBALS['fake_post_source'];
+		}
+		if ( false !== strpos( $q, 'ntc_views' ) && isset( $GLOBALS['fake_view'] ) ) {
+			return $GLOBALS['fake_view'];
 		}
 		if ( false !== strpos( $q, 'ntc_datasets' ) && isset( $GLOBALS['fake_dataset'] ) ) {
 			return $GLOBALS['fake_dataset'];
@@ -221,6 +233,27 @@ $GLOBALS['wpdb'] = new class() {
 		return null; }
 	public function get_results( $q, $o = 'OBJECT' ) {
 		$this->queries[] = $q;
+		if ( false !== strpos( $q, 'dalt_data' ) && isset( $GLOBALS['fake_legacy_data'] ) ) {
+			$rows = $GLOBALS['fake_legacy_data'];
+			if ( preg_match( '/row_index > (-?\d+)/', $q, $cursor_match ) ) {
+				$cursor = (int) $cursor_match[1];
+				$rows   = array_values( array_filter( $rows, static fn( $row ) => (int) $row['row_index'] > $cursor ) );
+			}
+			if ( preg_match( '/LIMIT (\d+)/', $q, $limit_match ) ) {
+				$rows = array_slice( $rows, 0, (int) $limit_match[1] );
+			}
+			return $rows;
+		}
+		if ( false !== strpos( $q, 'dalt_cell' ) && isset( $GLOBALS['fake_legacy_cells'] ) ) {
+			$rows = $GLOBALS['fake_legacy_cells'];
+			if ( preg_match( '/OFFSET (\d+)/', $q, $offset_match ) ) {
+				$rows = array_slice( $rows, (int) $offset_match[1] );
+			}
+			if ( preg_match( '/LIMIT (\d+)/', $q, $limit_match ) ) {
+				$rows = array_slice( $rows, 0, (int) $limit_match[1] );
+			}
+			return $rows;
+		}
 		if ( false !== strpos( $q, 'dalt_table' ) && isset( $GLOBALS['fake_legacy_tables'] ) ) {
 			$tables = $GLOBALS['fake_legacy_tables'];
 			if ( preg_match( '/id > (\d+)/', $q, $cursor_match ) ) {

@@ -3,16 +3,28 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; }
 
 final class NTC_Migrator {
-	public const MIGRATION_STATE_VERSION = 2;
-	public const POST_BATCH_SIZE        = 20;
-	private const POST_TIME_BUDGET_SECS = 12.0;
+	public const MIGRATION_STATE_VERSION = 3;
+	public const POST_BATCH_SIZE         = 20;
+	private const TABLE_ROW_BATCH_SIZE   = 200;
+	private const TABLE_CELL_BATCH_SIZE  = 200;
+	private const POST_TIME_BUDGET_SECS  = 12.0;
 
 	private NTC_Repository $repo;
 	public function __construct( NTC_Repository $repo ) {
 		$this->repo = $repo;}
 	public function clear_migration_state( string $batch_id ): void {
 		if ( '' !== $batch_id ) {
+			$table_state = get_transient( $this->migration_table_key( $batch_id ) );
+			if ( is_array( $table_state ) && ! empty( $table_state['dataset_id'] ) ) {
+				$map = (array) get_option( 'ntc_migration_map', array() );
+				$old = (int) ( $table_state['old_id'] ?? 0 );
+				if ( (int) ( $map[ $old ] ?? 0 ) !== (int) $table_state['dataset_id'] ) {
+					$this->repo->delete_dataset( (int) $table_state['dataset_id'] );
+					delete_option( 'ntc_lt_view_' . $old );
+				}
+			}
 			delete_transient( $this->migration_target_key( $batch_id ) );
+			delete_transient( $this->migration_table_key( $batch_id ) );
 		}
 	}
 
@@ -184,7 +196,7 @@ final class NTC_Migrator {
 		$map          = (array) get_option( 'ntc_migration_map', array() );
 		$target_state = $convert_content ? get_transient( $this->migration_target_key( $batch_id ) ) : false;
 		$targets      = is_array( $target_state ) ? $this->normalize_target_ids( (array) ( $target_state['ids'] ?? array() ) ) : array();
-		$tables = $this->migrate_tables( $map, $table_cursor );
+		$tables = $this->migrate_tables( $map, $table_cursor, 20, $batch_id );
 		$map    = $tables['map'];
 		update_option( 'ntc_migration_map', $map, false );
 		$base = array(
@@ -205,6 +217,8 @@ final class NTC_Migrator {
 			'tables_processed'    => $tables['processed'],
 			'tables_remaining'    => $tables['remaining'],
 			'next_table_cursor'   => $tables['next_cursor'],
+			'table_stage'         => (string) ( $tables['table_stage'] ?? '' ),
+			'current_table'       => (int) ( $tables['current_table'] ?? 0 ),
 			'phase'               => 'tables',
 			'migration_complete'  => false,
 		);
@@ -241,16 +255,34 @@ final class NTC_Migrator {
 			'tables_processed'    => 0,
 			'tables_remaining'    => 0,
 			'next_table_cursor'   => $tables['next_cursor'],
+			'table_stage'         => '',
+			'current_table'       => 0,
 			'phase'               => $result['remaining'] > 0 ? 'posts' : 'complete',
 			'migration_complete'  => 0 === $result['remaining'],
 		);
 	}
 
-	private function migrate_tables( array $map, int $cursor = 0, int $limit = 20 ): array {
+	private function migrate_tables( array $map, int $cursor = 0, int $limit = 20, string $batch_id = '' ): array {
 		global $wpdb;
 		$cursor = max( 0, $cursor );
 		$limit  = max( 1, min( 100, $limit ) );
 		$source = $wpdb->prefix . 'dalt_table';
+		if ( '' !== $batch_id ) {
+			$table_state = get_transient( $this->migration_table_key( $batch_id ) );
+			if ( is_array( $table_state ) ) {
+				$old = (int) ( $table_state['old_id'] ?? 0 );
+				if ( $old > 0 && isset( $map[ $old ] ) && $this->repo->get_dataset( (int) $map[ $old ], false ) ) {
+					delete_transient( $this->migration_table_key( $batch_id ) );
+					$cursor = max( $cursor, $old );
+				} else {
+					try {
+						return $this->continue_table_migration( $map, $cursor, $batch_id, $table_state );
+					} catch ( Throwable $e ) {
+						return $this->table_migration_result( $map, 0, $cursor, $source, array( 'Table ' . $old . ': ' . $e->getMessage() ), (string) ( $table_state['phase'] ?? 'rows' ), $old );
+					}
+				}
+			}
+		}
 		$tables = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$source} WHERE temporary=0 AND id > %d ORDER BY id ASC LIMIT %d", $cursor, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- the table name is an internal identifier and cannot be prepared.
 		if ( ! $tables ) {
 			$tables = array();
@@ -261,30 +293,138 @@ final class NTC_Migrator {
 		$next      = $cursor;
 		foreach ( $tables as $table ) {
 			$old  = (int) $table['id'];
-			$next = max( $next, $old );
-			++$processed;
 			if ( isset( $map[ $old ] ) && $this->repo->get_dataset( (int) $map[ $old ], false ) ) {
+				$next = max( $next, $old );
+				++$processed;
 				continue;
 			}
 			try {
-				$new = $this->migrate_table( $table );
-				if ( $new ) {
-					$map[ $old ] = $new;
-					++$created;
+				if ( '' !== $batch_id ) {
+					$this->start_table_migration( $table, $batch_id );
+					return $this->table_migration_result( $map, $processed, $next, $source, $errors, 'rows', $old, $created );
+				} else {
+					$new = $this->migrate_table( $table );
+					if ( $new ) {
+						$map[ $old ] = $new;
+						++$created;
+					}
+					$next = max( $next, $old );
+					++$processed;
 				}
 			} catch ( Throwable $e ) {
 				$errors[] = 'Table ' . $old . ': ' . $e->getMessage();
 			}
 			break;
 		}
-		$remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$source} WHERE temporary=0 AND id > %d", $next ) ); // phpcs:ignore WordPress.DB.PreparedSQL -- the table name is an internal identifier and cannot be prepared.
+		return $this->table_migration_result( $map, $processed, $next, $source, $errors, '', 0, $created );
+	}
+
+	private function start_table_migration( array $table, string $batch_id ): void {
+		global $wpdb;
+		$old        = (int) $table['id'];
+		$header_row = $wpdb->get_row( $wpdb->prepare( "SELECT row_index,content FROM {$wpdb->prefix}dalt_data WHERE table_id=%d ORDER BY row_index ASC LIMIT 1", $old ), ARRAY_A );
+		$header     = is_array( $header_row ) ? json_decode( (string) $header_row['content'], true ) : array();
+		$header     = is_array( $header ) ? $header : array();
+		$dataset_id = $this->repo->create_dataset( (string) ( ! empty( $table['name'] ) ? $table['name'] : 'League Table ' . $old ), $this->legacy_columns( $table, $header ), array(), (string) ( $table['description'] ?? '' ) );
+		if ( ! $dataset_id ) {
+			throw new RuntimeException( __( 'Could not create the destination dataset.', 'native-tables-charts' ) );
+		}
+		try {
+			$config             = $this->table_config( $table );
+			$config['cellMeta'] = array();
+			$view_id            = $this->repo->create_view( $dataset_id, 'table', (string) ( ! empty( $table['name'] ) ? $table['name'] : 'League Table ' . $old ), $config );
+			if ( ! $view_id ) {
+				throw new RuntimeException( __( 'Could not create the destination table view.', 'native-tables-charts' ) );
+			}
+		} catch ( Throwable $e ) {
+			$this->repo->delete_dataset( $dataset_id );
+			throw $e;
+		}
+		update_option( 'ntc_lt_view_' . $old, $view_id, false );
+		set_transient(
+			$this->migration_table_key( $batch_id ),
+			array(
+				'old_id'      => $old,
+				'dataset_id'  => $dataset_id,
+				'view_id'     => $view_id,
+				'phase'       => 'rows',
+				'row_cursor'  => is_array( $header_row ) ? (int) $header_row['row_index'] : -1,
+				'row_offset'  => 0,
+				'cell_offset' => 0,
+			),
+			DAY_IN_SECONDS
+		);
+	}
+
+	private function continue_table_migration( array $map, int $cursor, string $batch_id, array $state ): array {
+		global $wpdb;
+		$old        = (int) ( $state['old_id'] ?? 0 );
+		$dataset_id = (int) ( $state['dataset_id'] ?? 0 );
+		$view_id    = (int) ( $state['view_id'] ?? 0 );
+		$source     = $wpdb->prefix . 'dalt_table';
+		if ( $old < 1 || $dataset_id < 1 || $view_id < 1 || ! $this->repo->get_dataset( $dataset_id, false ) ) {
+			throw new RuntimeException( __( 'The resumable table import state is incomplete.', 'native-tables-charts' ) );
+		}
+		if ( 'rows' === ( $state['phase'] ?? 'rows' ) ) {
+			$row_cursor = (int) ( $state['row_cursor'] ?? -1 );
+			$raw        = $wpdb->get_results( $wpdb->prepare( "SELECT row_index,content FROM {$wpdb->prefix}dalt_data WHERE table_id=%d AND row_index > %d ORDER BY row_index ASC LIMIT %d", $old, $row_cursor, self::TABLE_ROW_BATCH_SIZE ), ARRAY_A );
+			$raw        = $raw ? $raw : array();
+			$rows       = array();
+			foreach ( $raw as $row ) {
+				$decoded = json_decode( (string) $row['content'], true );
+				$rows[]  = is_array( $decoded ) ? $decoded : array();
+			}
+			if ( $rows && ! $this->repo->upsert_rows( $dataset_id, $rows, (int) ( $state['row_offset'] ?? 0 ) ) ) {
+				throw new RuntimeException( __( 'Could not write a page of destination table rows.', 'native-tables-charts' ) );
+			}
+			if ( $raw ) {
+				$last                = end( $raw );
+				$state['row_cursor'] = (int) $last['row_index'];
+				$state['row_offset'] = (int) ( $state['row_offset'] ?? 0 ) + count( $rows );
+			}
+			if ( count( $raw ) < self::TABLE_ROW_BATCH_SIZE ) {
+				$state['phase'] = 'cells';
+			}
+			set_transient( $this->migration_table_key( $batch_id ), $state, DAY_IN_SECONDS );
+			return $this->table_migration_result( $map, 0, $cursor, $source, array(), (string) $state['phase'], $old );
+		}
+
+		$cell_offset = max( 0, (int) ( $state['cell_offset'] ?? 0 ) );
+		$cell_rows   = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}dalt_cell WHERE table_id=%d ORDER BY row_index ASC,column_index ASC LIMIT %d OFFSET %d", $old, self::TABLE_CELL_BATCH_SIZE, $cell_offset ), ARRAY_A );
+		$cell_rows   = $cell_rows ? $cell_rows : array();
+		if ( $cell_rows ) {
+			$view = $this->repo->get_view( $view_id );
+			if ( ! $view ) {
+				throw new RuntimeException( __( 'The destination table view could not be loaded.', 'native-tables-charts' ) );
+			}
+			$config             = (array) $view['config'];
+			$config['cellMeta'] = array_merge( (array) ( $config['cellMeta'] ?? array() ), $this->legacy_cell_meta( $cell_rows ) );
+			if ( ! $this->repo->update_view( $view_id, array( 'config' => $config ) ) ) {
+				throw new RuntimeException( __( 'Could not write a page of destination cell properties.', 'native-tables-charts' ) );
+			}
+			$state['cell_offset'] = $cell_offset + count( $cell_rows );
+		}
+		if ( count( $cell_rows ) >= self::TABLE_CELL_BATCH_SIZE ) {
+			set_transient( $this->migration_table_key( $batch_id ), $state, DAY_IN_SECONDS );
+			return $this->table_migration_result( $map, 0, $cursor, $source, array(), 'cells', $old );
+		}
+		$map[ $old ] = $dataset_id;
+		update_option( 'ntc_migration_map', $map, false );
+		delete_transient( $this->migration_table_key( $batch_id ) );
+		return $this->table_migration_result( $map, 1, $old, $source, array(), '', 0, 1 );
+	}
+
+	private function table_migration_result( array $map, int $processed, int $cursor, string $source, array $errors = array(), string $stage = '', int $current_table = 0, int $created = 0 ): array {
+		global $wpdb;
 		return array(
-			'map'         => $map,
-			'created'     => $created,
-			'processed'   => $processed,
-			'remaining'   => $remaining,
-			'next_cursor' => $next,
-			'errors'      => $errors,
+			'map'           => $map,
+			'created'       => $created,
+			'processed'     => $processed,
+			'remaining'     => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$source} WHERE temporary=0 AND id > %d", max( 0, $cursor ) ) ), // phpcs:ignore WordPress.DB.PreparedSQL -- the table name is an internal identifier and cannot be prepared.
+			'next_cursor'   => max( 0, $cursor ),
+			'errors'        => $errors,
+			'table_stage'   => $stage,
+			'current_table' => $current_table,
 		);
 	}
 
@@ -313,9 +453,28 @@ final class NTC_Migrator {
 	private function create_from_legacy( array $t, array $matrix, array $cell_rows ): array {
 		$old     = (int) ( $t['id'] ?? 0 );
 		$header  = $matrix ? array_shift( $matrix ) : array();
+		$columns = $this->legacy_columns( $t, $header );
+		$id = $this->repo->create_dataset( (string) ( ! empty( $t['name'] ) ? $t['name'] : 'League Table ' . $old ), $columns, $matrix, (string) ( $t['description'] ?? '' ) );
+		if ( ! $id ) {
+			return array(
+				'dataset_id' => 0,
+				'view_id'    => 0,
+			);
+		}
+		$cell_meta = $this->legacy_cell_meta( $cell_rows );
+		$config             = $this->table_config( $t );
+		$config['cellMeta'] = $cell_meta;
+		$view               = $this->repo->create_view( $id, 'table', (string) ( ! empty( $t['name'] ) ? $t['name'] : 'League Table ' . $old ), $config );
+		return array(
+			'dataset_id' => $id,
+			'view_id'    => $view,
+		);
+	}
+
+	private function legacy_columns( array $table, array $header ): array {
 		$columns = array();
-		$count   = max( (int) ( $t['columns'] ?? count( $header ) ), count( $header ) );
-		for ( $i = 0;$i < $count;$i++ ) {
+		$count   = max( (int) ( $table['columns'] ?? count( $header ) ), count( $header ) );
+		for ( $i = 0; $i < $count; $i++ ) {
 			$columns[] = array(
 				'id'     => 'c' . ( $i + 1 ),
 				'label'  => sanitize_text_field( $header[ $i ] ?? 'Column ' . ( $i + 1 ) ),
@@ -324,13 +483,10 @@ final class NTC_Migrator {
 				'format' => '',
 			);
 		}
-		$id = $this->repo->create_dataset( (string) ( ! empty( $t['name'] ) ? $t['name'] : 'League Table ' . $old ), $columns, $matrix, (string) ( $t['description'] ?? '' ) );
-		if ( ! $id ) {
-			return array(
-				'dataset_id' => 0,
-				'view_id'    => 0,
-			);
-		}
+		return $columns;
+	}
+
+	private function legacy_cell_meta( array $cell_rows ): array {
 		$cell_meta = array();
 		foreach ( $cell_rows as $cell ) {
 			$source_ri = (int) ( $cell['row_index'] ?? 0 );
@@ -386,13 +542,7 @@ final class NTC_Migrator {
 				$key               = 0 === $source_ri ? 'header:' . $ci : $ri . ':' . $ci;
 				$cell_meta[ $key ] = $meta;}
 		}
-		$config             = $this->table_config( $t );
-		$config['cellMeta'] = $cell_meta;
-		$view               = $this->repo->create_view( $id, 'table', (string) ( ! empty( $t['name'] ) ? $t['name'] : 'League Table ' . $old ), $config );
-		return array(
-			'dataset_id' => $id,
-			'view_id'    => $view,
-		);
+		return $cell_meta;
 	}
 
 	public function import_xml( string $xml ): array {
@@ -611,6 +761,10 @@ final class NTC_Migrator {
 		return 'ntc_migration_targets_' . sanitize_key( $batch );
 	}
 
+	private function migration_table_key( string $batch ): string {
+		return 'ntc_migration_table_' . sanitize_key( $batch );
+	}
+
 	private function normalize_target_ids( array $ids ): array {
 		$ids = array_values( array_unique( array_filter( array_map( 'absint', $ids ) ) ) );
 		sort( $ids, SORT_NUMERIC );
@@ -675,7 +829,7 @@ final class NTC_Migrator {
 				$new
 			);
 			if ( $new !== $original ) {
-				$wpdb->insert(
+				$backed_up = $wpdb->insert(
 					$wpdb->prefix . 'ntc_backups',
 					array(
 						'batch_id'         => $batch,
@@ -686,16 +840,22 @@ final class NTC_Migrator {
 					),
 					array( '%s', '%d', '%s', '%s', '%s' )
 				);
-				$ok = wp_update_post(
-					array(
-						'ID'           => (int) $p['ID'],
-						'post_content' => $new,
-					),
-					true
+				if ( false === $backed_up ) {
+					$errors[] = 'Post ' . $p['ID'] . ': ' . __( 'The rollback backup could not be saved.', 'native-tables-charts' );
+					++$processed;
+					continue;
+				}
+				$ok = $wpdb->update(
+					$wpdb->posts,
+					array( 'post_content' => $new ),
+					array( 'ID' => (int) $p['ID'] ),
+					array( '%s' ),
+					array( '%d' )
 				);
-				if ( is_wp_error( $ok ) ) {
-					$errors[] = 'Post ' . $p['ID'] . ': ' . $ok->get_error_message();
+				if ( false === $ok ) {
+					$errors[] = 'Post ' . $p['ID'] . ': ' . __( 'The database update failed.', 'native-tables-charts' );
 				} else {
+					clean_post_cache( (int) $p['ID'] );
 					++$updated;}
 			}
 			++$processed;

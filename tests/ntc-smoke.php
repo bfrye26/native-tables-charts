@@ -362,7 +362,7 @@ $assert( 3 === count( $GLOBALS['wpdb']->queries ), 'patch_rows batches 1200 rows
 $assert( 200 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 'patch last statement holds 200 rows' );
 require_once dirname( __DIR__ ) . '/includes/class-ntc-migrator.php';
 $migrator                   = new NTC_Migrator( $repo );
-$assert( 2 === NTC_Migrator::MIGRATION_STATE_VERSION, 'migration rejects incompatible saved progress before continuing' );
+$assert( 3 === NTC_Migrator::MIGRATION_STATE_VERSION, 'migration rejects incompatible saved progress before continuing' );
 $assert( 20 === NTC_Migrator::POST_BATCH_SIZE, 'migration post batches stay below proxy timeout thresholds' );
 $call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
 	$mm = ( new ReflectionClass( 'NTC_Migrator' ) )->getMethod( $m );
@@ -399,6 +399,44 @@ $assert( 5 === $table_batch['remaining'], 'legacy table import reports remaining
 $assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'id > 0 ORDER BY id ASC LIMIT 20' ), 'legacy table import pages without OFFSET' );
 unset( $GLOBALS['fake_dataset'], $GLOBALS['fake_legacy_tables'], $GLOBALS['fake_legacy_table_remaining'] );
 $GLOBALS['wpdb']->queries = array();
+$GLOBALS['fake_dataset']  = array( 'id' => 42, 'columns_json' => '[]' );
+$GLOBALS['fake_view']     = array( 'id' => 99, 'config_json' => '{"cellMeta":[]}' );
+$GLOBALS['fake_options']  = array( 'ntc_migration_map' => array() );
+$GLOBALS['fake_legacy_table_remaining'] = 1;
+$GLOBALS['fake_legacy_data'] = array();
+for ( $i = 1; $i <= 250; $i++ ) {
+	$GLOBALS['fake_legacy_data'][] = array( 'row_index' => $i, 'content' => wp_json_encode( array( 'Row ' . $i, $i ) ) );
+}
+$GLOBALS['fake_legacy_cells'] = array();
+for ( $i = 1; $i <= 250; $i++ ) {
+	$GLOBALS['fake_legacy_cells'][] = array( 'id' => $i, 'row_index' => $i, 'column_index' => 1, 'text_color' => '#111111' );
+}
+$GLOBALS['fake_transients']['ntc_migration_table_paged-table'] = array(
+	'old_id'      => 1,
+	'dataset_id'  => 42,
+	'view_id'     => 99,
+	'phase'       => 'rows',
+	'row_cursor'  => 0,
+	'row_offset'  => 0,
+	'cell_offset' => 0,
+);
+$paged_rows_1 = $call_m( 'migrate_tables', array(), 0, 20, 'paged-table' );
+$row_state_1  = get_transient( 'ntc_migration_table_paged-table' );
+$assert( 0 === $paged_rows_1['processed'] && 'rows' === $paged_rows_1['table_stage'], 'large legacy tables keep row import resumable' );
+$assert( 200 === $row_state_1['row_cursor'] && 200 === $row_state_1['row_offset'], 'legacy table row import advances by a bounded 200-row page' );
+$assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'row_index > 0 ORDER BY row_index ASC LIMIT 200' ), 'legacy table row query has a strict page limit' );
+$paged_rows_2 = $call_m( 'migrate_tables', array(), 0, 20, 'paged-table' );
+$row_state_2  = get_transient( 'ntc_migration_table_paged-table' );
+$assert( 250 === $row_state_2['row_cursor'] && 'cells' === $row_state_2['phase'], 'legacy table row import switches to cell properties after the final row page' );
+$paged_cells_1 = $call_m( 'migrate_tables', array(), 0, 20, 'paged-table' );
+$cell_state_1  = get_transient( 'ntc_migration_table_paged-table' );
+$assert( 0 === $paged_cells_1['processed'] && 200 === $cell_state_1['cell_offset'], 'legacy cell properties advance by a bounded 200-cell page' );
+$GLOBALS['fake_legacy_table_remaining'] = 0;
+$paged_cells_2 = $call_m( 'migrate_tables', array(), 0, 20, 'paged-table' );
+$assert( 1 === $paged_cells_2['processed'] && 42 === $paged_cells_2['map'][1], 'resumable legacy table import completes only after all row and cell pages' );
+$assert( false === get_transient( 'ntc_migration_table_paged-table' ), 'completed legacy table import clears its resumable state' );
+unset( $GLOBALS['fake_dataset'], $GLOBALS['fake_view'], $GLOBALS['fake_legacy_data'], $GLOBALS['fake_legacy_cells'], $GLOBALS['fake_legacy_table_remaining'] );
+$GLOBALS['wpdb']->queries = array();
 $GLOBALS['fake_posts']    = array();
 for ( $i = 0; $i < 200; $i++ ) {
 	$GLOBALS['fake_posts'][] = array(
@@ -407,12 +445,16 @@ for ( $i = 0; $i < 200; $i++ ) {
 	);
 }
 $target_ids = range( 1, 50 );
+$GLOBALS['wp_update_post_calls'] = 0;
+$GLOBALS['cleaned_post_ids']     = array();
 $r          = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 0, 20, $target_ids );
 $queries    = implode( ' ', $GLOBALS['wpdb']->queries );
 $assert( 20 === $r['processed'] && 50 === $r['total'], 'convert_posts processes only a bounded target-post page' );
 $assert( 20 === $r['next_cursor'] && 30 === $r['remaining'] && 20 === $r['target_offset'], 'convert_posts returns resumable target progress' );
 $assert( false !== strpos( $queries, 'ID IN (1,2,3,4,5' ), 'convert_posts queries the snapshotted target IDs directly' );
 $assert( false === strpos( $queries, 'post_content LIKE' ) && false === strpos( $queries, 'ID >' ), 'convert_posts does not scan unrelated posts' );
+$assert( 0 === $GLOBALS['wp_update_post_calls'], 'migration content updates bypass expensive save_post hooks' );
+$assert( 20 === count( $GLOBALS['cleaned_post_ids'] ), 'migration content updates clear each changed post cache' );
 $r2 = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 20, 20, $target_ids );
 $assert( 20 === $r2['processed'] && 40 === $r2['next_cursor'] && 10 === $r2['remaining'] && 40 === $r2['target_offset'], 'convert_posts resumes at the next target ID batch' );
 $GLOBALS['wpdb']->queries = array();

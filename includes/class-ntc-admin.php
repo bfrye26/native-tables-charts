@@ -123,6 +123,9 @@ final class NTC_Admin {
 				delete_transient( 'ntc_migration_targets_pending_' . $uid );
 				$this->redirect( 'ntc-migration', 'migration_reset=1' );
 			}
+			if ( is_array( $prev ) && ! empty( $prev['errors'] ) ) {
+				$prev['errors'] = array();
+			}
 			$convert     = is_array( $prev ) ? ! empty( $prev['convert'] ) : ! empty( $_POST['convert_content'] );
 			$offset      = absint( $_POST['offset'] ?? ( is_array( $prev ) ? ( $prev['offset'] ?? 0 ) : 0 ) );
 			$cursor      = absint( $_POST['cursor'] ?? ( is_array( $prev ) ? ( $prev['cursor'] ?? 0 ) : 0 ) );
@@ -175,6 +178,8 @@ final class NTC_Admin {
 					'table_offset' => $table_offset,
 					'table_cursor' => $next_table_cursor,
 					'table_total' => $table_total,
+					'table_stage' => (string) ( $result['table_stage'] ?? '' ),
+					'current_table' => (int) ( $result['current_table'] ?? 0 ),
 					'total'     => $total,
 					'instance_total' => $instance_total,
 					'phase'     => (string) ( $result['phase'] ?? 'tables' ),
@@ -642,14 +647,24 @@ endif;
 		?>
 		<?php if ( is_array( $migration_progress ) && empty( $migration_progress['done'] ) ) : ?>
 		<form method="post" id="ntc-migration-reset-form"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_reset"><input type="hidden" name="batch_id" value="<?php echo esc_attr( $migration_progress['batch_id'] ?? '' ); ?>"><button class="button button-secondary"><?php esc_html_e( 'Restart Migration Detection', 'native-tables-charts' ); ?></button></form>
+			<?php if ( ! empty( $migration_progress['errors'] ) ) : ?>
+		<div class="notice notice-error"><p><?php esc_html_e( 'Migration paused after an error. Use Run Migration to retry this step, or restart detection to begin a clean batch.', 'native-tables-charts' ); ?></p><p><code><?php echo esc_html( (string) $migration_progress['errors'][ array_key_last( $migration_progress['errors'] ) ] ); ?></code></p></div>
+			<?php endif; ?>
 			<?php if ( 'tables' === ( $migration_progress['phase'] ?? 'tables' ) ) : ?>
-				<?php /* translators: 1: number of legacy tables scanned so far, 2: total legacy tables. */ ?>
-		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d legacy tables scanned. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['table_offset'], (int) $migration_progress['table_total'] ); ?></p></div>
+				<?php if ( ! empty( $migration_progress['current_table'] ) ) : ?>
+					<?php /* translators: 1: legacy table ID, 2: current import stage, 3: completed legacy tables, 4: total legacy tables. */ ?>
+		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — table %1$d, importing %2$s. %3$d of %4$d legacy tables completed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['current_table'], 'cells' === ( $migration_progress['table_stage'] ?? '' ) ? esc_html__( 'cell properties', 'native-tables-charts' ) : esc_html__( 'rows', 'native-tables-charts' ), (int) $migration_progress['table_offset'], (int) $migration_progress['table_total'] ); ?></p></div>
+				<?php else : ?>
+					<?php /* translators: 1: number of legacy tables completed so far, 2: total legacy tables. */ ?>
+		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d legacy tables completed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['table_offset'], (int) $migration_progress['table_total'] ); ?></p></div>
+				<?php endif; ?>
 			<?php else : ?>
 				<?php /* translators: 1: number of identified posts processed so far, 2: total identified posts. */ ?>
 		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d identified posts processed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['offset'], (int) $migration_progress['total'] ); ?></p></div>
 			<?php endif; ?>
+			<?php if ( empty( $migration_progress['errors'] ) ) : ?>
 		<script>(function(){setTimeout(function(){var f=document.getElementById('ntc-migrate-form');if(f){(f.requestSubmit||f.submit).call(f);}},2000);})();</script>
+			<?php endif; ?>
 		<?php endif; ?>
 		<?php if ( is_array( $rollback_progress ) && empty( $rollback_progress['done'] ) ) : ?>
 			<?php /* translators: 1: number of posts restored so far, 2: total posts to restore. */ ?>
