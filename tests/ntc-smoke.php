@@ -386,6 +386,30 @@ $assert( 0 === NTC_Renderer::chart_defaults()['radarMax'], 'chart_defaults inclu
 $assert( 0 === NTC_Renderer::chart_defaults()['gaugeMin'] && 100 === NTC_Renderer::chart_defaults()['gaugeMax'], 'chart_defaults includes gaugeMin 0 and gaugeMax 100' );
 $assert( array() === NTC_Renderer::chart_defaults()['seriesRules'], 'chart_defaults includes seriesRules' );
 $assert( false === NTC_Renderer::chart_defaults()['legendToggles'], 'chart_defaults includes legendToggles false' );
+$line_series = $call(
+	'chart_line',
+	array( array( 'A', 5 ), array( 'B', 10 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'xColumn'      => null,
+	),
+	false,
+	false
+);
+$assert( false !== strpos( $line_series, 'ntc-svg-line ntc-series-0' ), 'chart_line polyline carries series class' );
+$donut_series = $call(
+	'chart_donut',
+	array( array( 'A', 30 ), array( 'B', 70 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'showValues'   => false,
+	)
+);
+$assert( false !== strpos( $donut_series, 'ntc-donut-seg ntc-series-0' ), 'chart_donut segment carries series class' );
 $series_cfg = array(
 	'seriesRules' => array(
 		array(

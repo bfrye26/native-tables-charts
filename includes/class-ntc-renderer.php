@@ -1701,16 +1701,16 @@ final class NTC_Renderer {
 				$pts[] = array( $px( $xv ), $py( $val ), $r[ $l ] ?? '', $val );
 			}
 			$poly       = implode( ' ', array_map( fn( $p ) => round( $p[0], 1 ) . ',' . round( $p[1], 1 ), $pts ) );
-			$line_class = $area ? 'ntc-svg-line ntc-svg-area' : 'ntc-svg-line';
+			$line_class = 'ntc-svg-line ntc-series-' . ( $si % 6 ) . ( $area ? ' ntc-svg-area' : '' );
 			if ( ! $scatter ) {
 				$out .= '<polyline points="' . $poly . '" class="' . $line_class . '" style="stroke:' . $this->series_color( $pts[0][3], $v, $c, $colors[ $si % count( $colors ) ] ) . '" fill="none"/>';
 			}
 			if ( $area && count( $pts ) > 1 ) {
-				$out .= '<polygon points="' . round( $pts[0][0], 1 ) . ',' . ( $pad_t + $ph ) . ' ' . $poly . ' ' . round( $pts[ count( $pts ) - 1 ][0], 1 ) . ',' . ( $pad_t + $ph ) . '" class="ntc-svg-area-fill" style="fill:' . $colors[ $si % count( $colors ) ] . ';opacity:.18"/>';
+				$out .= '<polygon points="' . round( $pts[0][0], 1 ) . ',' . ( $pad_t + $ph ) . ' ' . $poly . ' ' . round( $pts[ count( $pts ) - 1 ][0], 1 ) . ',' . ( $pad_t + $ph ) . '" class="ntc-svg-area-fill ntc-series-' . ( $si % 6 ) . '" style="fill:' . $colors[ $si % count( $colors ) ] . ';opacity:.18"/>';
 			}
 			foreach ( $pts as $p ) {
 				$tip  = ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $p[2], $p[3], $columns[ $v ] ?? array(), $c ) . '"' : '';
-				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point" style="fill:' . $this->series_color( $p[3], $v, $c, $colors[ $si % count( $colors ) ] ) . '"' . $tip . '><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
+				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point ntc-series-' . ( $si % 6 ) . '" style="fill:' . $this->series_color( $p[3], $v, $c, $colors[ $si % count( $colors ) ] ) . '"' . $tip . '><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
 			}
 		}
 		foreach ( $rows as $i => $r ) {
@@ -1766,7 +1766,7 @@ final class NTC_Renderer {
 			$len       = $circ * ( $val / $sum );
 			$hl        = $this->is_highlight( (string) ( $row[ $l ] ?? '' ), $c );
 			$seg_color = $hl ? 'var(--ntc-highlight)' : $this->series_color( $val, $v, $c, $colors[ $i % count( $colors ) ] );
-			$out      .= '<circle cx="160" cy="160" r="' . $r . '" class="ntc-donut-seg' . ( $hl ? ' is-highlight' : '' ) . '" style="stroke:' . $seg_color . ';stroke-dasharray:' . $len . ' ' . ( $circ - $len ) . ';stroke-dashoffset:-' . $offset . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( (string) ( $row[ $l ] ?? '' ), $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><title>' . esc_html( ( $row[ $l ] ?? '' ) . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
+			$out      .= '<circle cx="160" cy="160" r="' . $r . '" class="ntc-donut-seg ntc-series-' . ( $i % 6 ) . ( $hl ? ' is-highlight' : '' ) . '" style="stroke:' . $seg_color . ';stroke-dasharray:' . $len . ' ' . ( $circ - $len ) . ';stroke-dashoffset:-' . $offset . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( (string) ( $row[ $l ] ?? '' ), $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><title>' . esc_html( ( $row[ $l ] ?? '' ) . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
 			$offset   += $len;
 		}$out .= '</svg><div class="ntc-donut-legend">';
 		foreach ( $rows as $i => $row ) {
@@ -1777,7 +1777,7 @@ final class NTC_Renderer {
 			$legend_color = $hl ? 'var(--ntc-highlight)' : $this->series_color( $row[ $v ] ?? 0, $v, $c, $colors[ $i % count( $colors ) ] );
 			$tip          = ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( (string) ( $row[ $l ] ?? '' ), $row[ $v ] ?? 0, $columns[ $v ] ?? array(), $c ) . '"' : '';
 			if ( ! empty( $c['legendToggles'] ) ) {
-				$out .= '<button type="button" class="ntc-legend-toggle' . ( $hl ? ' is-highlight' : '' ) . '" data-series="' . $i . '" aria-pressed="true"' . $tip . '><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</button>';
+				$out .= '<button type="button" class="ntc-legend-toggle' . ( $hl ? ' is-highlight' : '' ) . '" data-series="' . ( $i % 6 ) . '" aria-pressed="true"' . $tip . '><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</button>';
 			} else {
 				$out .= '<span class="' . ( $hl ? 'is-highlight' : '' ) . '"' . $tip . '><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</span>';
 			}
