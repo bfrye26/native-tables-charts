@@ -3,12 +3,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; }
 
 final class NTC_Migrator {
+	public const MIGRATION_STATE_VERSION = 2;
 	public const POST_BATCH_SIZE        = 20;
 	private const POST_TIME_BUDGET_SECS = 12.0;
 
 	private NTC_Repository $repo;
 	public function __construct( NTC_Repository $repo ) {
 		$this->repo = $repo;}
+	public function clear_migration_state( string $batch_id ): void {
+		if ( '' !== $batch_id ) {
+			delete_transient( $this->migration_target_key( $batch_id ) );
+		}
+	}
 
 	public function detect( bool $include_instances = true, bool $include_posts = true ): array {
 		global $wpdb;

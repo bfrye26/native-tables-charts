@@ -362,12 +362,16 @@ $assert( 3 === count( $GLOBALS['wpdb']->queries ), 'patch_rows batches 1200 rows
 $assert( 200 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 'patch last statement holds 200 rows' );
 require_once dirname( __DIR__ ) . '/includes/class-ntc-migrator.php';
 $migrator                   = new NTC_Migrator( $repo );
+$assert( 2 === NTC_Migrator::MIGRATION_STATE_VERSION, 'migration rejects incompatible saved progress before continuing' );
 $assert( 20 === NTC_Migrator::POST_BATCH_SIZE, 'migration post batches stay below proxy timeout thresholds' );
 $call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
 	$mm = ( new ReflectionClass( 'NTC_Migrator' ) )->getMethod( $m );
 	$mm->setAccessible( true );
 	return $mm->invokeArgs( $migrator, $a );
 };
+$GLOBALS['fake_transients']['ntc_migration_targets_stale-batch'] = array( 'ids' => array( 1 ) );
+$migrator->clear_migration_state( 'stale-batch' );
+$assert( false === get_transient( 'ntc_migration_targets_stale-batch' ), 'migration reset clears an incompatible target snapshot' );
 $GLOBALS['fake_dataset']                = array( 'id' => 42, 'columns_json' => '[]' );
 $GLOBALS['fake_options']                = array( 'ntc_migration_map' => array( 1 => 42, 2 => 42 ) );
 $GLOBALS['fake_transients']['ntc_migration_targets_batch-tables'] = array( 'ids' => array( 7, 9 ), 'instances' => 3 );

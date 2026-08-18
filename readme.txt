@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 3.0.4
+Stable tag: 3.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -184,6 +184,11 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 3.0.5 =
+* Added migration state versioning so incompatible saved progress is cleared before continuation.
+* Prevented stale migration auto-submits from rebuilding target detection inside proxied requests.
+* Restored fresh post and shortcode counts after upgrades and added a Restart Migration Detection control.
 
 = 3.0.4 =
 * Snapshotted the exact post IDs found during legacy shortcode and block detection.

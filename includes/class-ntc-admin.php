@@ -101,6 +101,15 @@ final class NTC_Admin {
 				);
 			}set_transient( 'ntc_tools_result_' . get_current_user_id(), $result, 30 * MINUTE_IN_SECONDS );
 			$this->redirect( 'ntc-tools', 'imported=1' );}
+		if ( 'migration_reset' === $action && current_user_can( 'ntc_migrate' ) ) {
+			$uid      = get_current_user_id();
+			$progress = get_transient( 'ntc_migration_progress_' . $uid );
+			$batch_id = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? ( is_array( $progress ) ? ( $progress['batch_id'] ?? '' ) : '' ) ) );
+			$this->migrator->clear_migration_state( $batch_id );
+			delete_transient( 'ntc_migration_progress_' . $uid );
+			delete_transient( 'ntc_migration_targets_pending_' . $uid );
+			$this->redirect( 'ntc-migration', 'migration_reset=1' );
+		}
 		if ( 'migration_dry_run' === $action && current_user_can( 'ntc_migrate' ) ) {
 			set_transient( 'ntc_migration_report_' . get_current_user_id(), $this->migrator->dry_run(), 10 * MINUTE_IN_SECONDS );
 			$this->redirect( 'ntc-migration', 'dryrun=1' );}
@@ -108,6 +117,12 @@ final class NTC_Admin {
 			$batch_id    = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? '' ) );
 			$uid         = get_current_user_id();
 			$prev        = '' !== $batch_id ? get_transient( 'ntc_migration_progress_' . $uid ) : false;
+			if ( is_array( $prev ) && NTC_Migrator::MIGRATION_STATE_VERSION !== (int) ( $prev['state_version'] ?? 0 ) ) {
+				$this->migrator->clear_migration_state( $batch_id );
+				delete_transient( 'ntc_migration_progress_' . $uid );
+				delete_transient( 'ntc_migration_targets_pending_' . $uid );
+				$this->redirect( 'ntc-migration', 'migration_reset=1' );
+			}
 			$convert     = is_array( $prev ) ? ! empty( $prev['convert'] ) : ! empty( $_POST['convert_content'] );
 			$offset      = absint( $_POST['offset'] ?? ( is_array( $prev ) ? ( $prev['offset'] ?? 0 ) : 0 ) );
 			$cursor      = absint( $_POST['cursor'] ?? ( is_array( $prev ) ? ( $prev['cursor'] ?? 0 ) : 0 ) );
@@ -150,6 +165,7 @@ final class NTC_Admin {
 			set_transient(
 				'ntc_migration_progress_' . $uid,
 				array(
+					'state_version' => NTC_Migrator::MIGRATION_STATE_VERSION,
 					'done'      => false,
 					'convert'   => $convert,
 					'batch_id'  => $batch_id,
@@ -554,7 +570,14 @@ endif;
 	}
 
 	public function migration_page(): void {
-		$migration_progress = get_transient( 'ntc_migration_progress_' . get_current_user_id() );
+		$uid                = get_current_user_id();
+		$migration_progress = get_transient( 'ntc_migration_progress_' . $uid );
+		if ( is_array( $migration_progress ) && NTC_Migrator::MIGRATION_STATE_VERSION !== (int) ( $migration_progress['state_version'] ?? 0 ) ) {
+			$this->migrator->clear_migration_state( (string) ( $migration_progress['batch_id'] ?? '' ) );
+			delete_transient( 'ntc_migration_progress_' . $uid );
+			delete_transient( 'ntc_migration_targets_pending_' . $uid );
+			$migration_progress = false;
+		}
 		$active_migration   = is_array( $migration_progress ) && empty( $migration_progress['done'] );
 		$detect             = $this->migrator->detect( ! $active_migration, ! $active_migration );
 		if ( $active_migration ) {
@@ -562,7 +585,7 @@ endif;
 			$detect['instances'] = (int) ( $migration_progress['instance_total'] ?? 0 );
 		} else {
 			set_transient(
-				'ntc_migration_targets_pending_' . get_current_user_id(),
+				'ntc_migration_targets_pending_' . $uid,
 				array(
 					'post_ids'  => (array) ( $detect['post_ids'] ?? array() ),
 					'instances' => (int) $detect['instances'],
@@ -618,6 +641,7 @@ endif;
 		endif;
 		?>
 		<?php if ( is_array( $migration_progress ) && empty( $migration_progress['done'] ) ) : ?>
+		<form method="post" id="ntc-migration-reset-form"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_reset"><input type="hidden" name="batch_id" value="<?php echo esc_attr( $migration_progress['batch_id'] ?? '' ); ?>"><button class="button button-secondary"><?php esc_html_e( 'Restart Migration Detection', 'native-tables-charts' ); ?></button></form>
 			<?php if ( 'tables' === ( $migration_progress['phase'] ?? 'tables' ) ) : ?>
 				<?php /* translators: 1: number of legacy tables scanned so far, 2: total legacy tables. */ ?>
 		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d legacy tables scanned. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['table_offset'], (int) $migration_progress['table_total'] ); ?></p></div>
@@ -625,7 +649,7 @@ endif;
 				<?php /* translators: 1: number of identified posts processed so far, 2: total identified posts. */ ?>
 		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d identified posts processed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['offset'], (int) $migration_progress['total'] ); ?></p></div>
 			<?php endif; ?>
-		<script>(function(){setTimeout(function(){var f=document.getElementById('ntc-migrate-form');if(f){(f.requestSubmit||f.submit).call(f);}},600);})();</script>
+		<script>(function(){setTimeout(function(){var f=document.getElementById('ntc-migrate-form');if(f){(f.requestSubmit||f.submit).call(f);}},2000);})();</script>
 		<?php endif; ?>
 		<?php if ( is_array( $rollback_progress ) && empty( $rollback_progress['done'] ) ) : ?>
 			<?php /* translators: 1: number of posts restored so far, 2: total posts to restore. */ ?>
