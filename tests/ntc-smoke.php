@@ -362,6 +362,7 @@ $assert( 3 === count( $GLOBALS['wpdb']->queries ), 'patch_rows batches 1200 rows
 $assert( 200 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 'patch last statement holds 200 rows' );
 require_once dirname( __DIR__ ) . '/includes/class-ntc-migrator.php';
 $migrator                   = new NTC_Migrator( $repo );
+$assert( 20 === NTC_Migrator::POST_BATCH_SIZE, 'migration post batches stay below proxy timeout thresholds' );
 $call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
 	$mm = ( new ReflectionClass( 'NTC_Migrator' ) )->getMethod( $m );
 	$mm->setAccessible( true );
@@ -369,6 +370,7 @@ $call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
 };
 $GLOBALS['wpdb']->queries   = array();
 $GLOBALS['fake_post_count'] = 550;
+$GLOBALS['fake_post_remaining'] = 530;
 $GLOBALS['fake_posts']      = array();
 for ( $i = 0; $i < 200; $i++ ) {
 	$GLOBALS['fake_posts'][] = array(
@@ -376,9 +378,14 @@ for ( $i = 0; $i < 200; $i++ ) {
 		'post_content' => '[lt id="1"] x',
 	);
 }
-$r = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 0, 200 );
-$assert( 200 === $r['processed'] && 550 === $r['total'], 'convert_posts processes a 200-post page and reports total' );
-$assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'LIMIT 200 OFFSET 0' ), 'convert_posts pages with LIMIT/OFFSET' );
+$r = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 0, 20 );
+$assert( 20 === $r['processed'] && 550 === $r['total'], 'convert_posts processes a bounded post page and reports total' );
+$assert( 20 === $r['next_cursor'] && 530 === $r['remaining'], 'convert_posts returns a resumable ID cursor and remaining count' );
+$assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'ID > 0 ORDER BY ID ASC LIMIT 20' ), 'convert_posts pages by ID cursor without OFFSET' );
+$assert( false === strpos( implode( ' ', $GLOBALS['wpdb']->queries ), ' OFFSET ' ), 'convert_posts never offsets into a shrinking result set' );
+$GLOBALS['fake_post_remaining'] = 510;
+$r2 = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 20, 20 );
+$assert( 20 === $r2['processed'] && 40 === $r2['next_cursor'] && 510 === $r2['remaining'], 'convert_posts resumes after the last processed post ID' );
 $GLOBALS['fake_backup_count'] = 450;
 $GLOBALS['fake_backups']      = array();
 for ( $i = 0; $i < 200; $i++ ) {

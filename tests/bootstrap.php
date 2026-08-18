@@ -201,6 +201,9 @@ $GLOBALS['wpdb'] = new class() {
 		if ( false !== strpos( $q, 'ntc_backups' ) && isset( $GLOBALS['fake_backup_count'] ) ) {
 			return $GLOBALS['fake_backup_count'];
 		}
+		if ( false !== strpos( $q, 'wp_posts' ) && false !== strpos( $q, 'ID >' ) && isset( $GLOBALS['fake_post_remaining'] ) ) {
+			return $GLOBALS['fake_post_remaining'];
+		}
 		if ( false !== strpos( $q, 'wp_posts' ) && isset( $GLOBALS['fake_post_count'] ) ) {
 			return $GLOBALS['fake_post_count'];
 		}
@@ -216,7 +219,15 @@ $GLOBALS['wpdb'] = new class() {
 	public function get_results( $q, $o = 'OBJECT' ) {
 		$this->queries[] = $q;
 		if ( false !== strpos( $q, 'wp_posts' ) && isset( $GLOBALS['fake_posts'] ) ) {
-			return $GLOBALS['fake_posts'];
+			$posts = $GLOBALS['fake_posts'];
+			if ( preg_match( '/ID > (\d+)/', $q, $cursor_match ) ) {
+				$cursor = (int) $cursor_match[1];
+				$posts  = array_values( array_filter( $posts, static fn( $post ) => (int) $post['ID'] > $cursor ) );
+			}
+			if ( preg_match( '/LIMIT (\d+)/', $q, $limit_match ) ) {
+				$posts = array_slice( $posts, 0, (int) $limit_match[1] );
+			}
+			return $posts;
 		}
 		if ( false !== strpos( $q, 'ntc_backups' ) && isset( $GLOBALS['fake_backups'] ) ) {
 			return $GLOBALS['fake_backups'];

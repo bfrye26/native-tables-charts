@@ -3,11 +3,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; }
 
 final class NTC_Migrator {
+	public const POST_BATCH_SIZE        = 20;
+	private const POST_TIME_BUDGET_SECS = 12.0;
+
 	private NTC_Repository $repo;
 	public function __construct( NTC_Repository $repo ) {
 		$this->repo = $repo;}
 
-	public function detect(): array {
+	public function detect( bool $include_instances = true ): array {
 		global $wpdb;
 		$tables = array(
 			'table' => $wpdb->prefix . 'dalt_table',
@@ -21,15 +24,20 @@ final class NTC_Migrator {
 		$post_count     = 0;
 		$instance_count = 0;
 		if ( $count ) {
-			$posts = $wpdb->get_results( "SELECT ID,post_content FROM {$wpdb->posts} WHERE post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')", ARRAY_A );
-			if ( ! $posts ) {
-				$posts = array();
+			$where = "post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')";
+			if ( $include_instances ) {
+				$posts = $wpdb->get_results( "SELECT ID,post_content FROM {$wpdb->posts} WHERE {$where}", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
+				if ( ! $posts ) {
+					$posts = array();
+				}
+				$post_count = count( $posts );
+				foreach ( $posts as $p ) {
+					preg_match_all( '/\[lt\s+[^\]]*id=["\']?(\d+)["\']?[^\]]*\]/i', $p['post_content'], $m );
+					$instance_count += count( $m[0] );
+					$instance_count += substr_count( $p['post_content'], 'wp:dalt/table' );}
+			} else {
+				$post_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE {$where}" ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
 			}
-			$post_count = count( $posts );
-			foreach ( $posts as $p ) {
-				preg_match_all( '/\[lt\s+[^\]]*id=["\']?(\d+)["\']?[^\]]*\]/i', $p['post_content'], $m );
-				$instance_count += count( $m[0] );
-				$instance_count += substr_count( $p['post_content'], 'wp:dalt/table' );}
 		}
 		return array(
 			'available' => $count > 0,
@@ -66,7 +74,7 @@ final class NTC_Migrator {
 		return $report;
 	}
 
-	public function migrate( bool $convert_content = true, int $offset = 0, int $chunk = 200 ): array {
+	public function migrate( bool $convert_content = true, int $cursor = 0, int $chunk = self::POST_BATCH_SIZE ): array {
 		if ( ! current_user_can( 'ntc_migrate' ) && ! current_user_can( 'manage_options' ) ) {
 			return array(
 				'success' => false,
@@ -74,7 +82,7 @@ final class NTC_Migrator {
 			);
 		}
 		global $wpdb;
-		$detect = $this->detect();
+		$detect = $this->detect( false );
 		if ( ! $detect['available'] ) {
 			return array(
 				'success' => false,
@@ -152,8 +160,12 @@ final class NTC_Migrator {
 		$instances = 0;
 		$total     = 0;
 		$processed = 0;
+		$result    = array(
+			'remaining'   => 0,
+			'next_cursor' => max( 0, $cursor ),
+		);
 		if ( $convert_content ) {
-			$result    = $this->convert_posts( $map, $batch, $offset, $chunk );
+			$result    = $this->convert_posts( $map, $batch, $cursor, $chunk );
 			$posts     = $result['posts'];
 			$instances = $result['instances'];
 			$total     = $result['total'];
@@ -169,11 +181,12 @@ final class NTC_Migrator {
 			'map'                 => $map,
 			'posts_total'         => $total,
 			'processed'           => $processed,
-			'posts_remaining'     => max( 0, $total - $processed - $offset ),
+			'posts_remaining'     => (int) ( $result['remaining'] ?? 0 ),
+			'next_cursor'         => (int) ( $result['next_cursor'] ?? max( 0, $cursor ) ),
 		);
 	}
 
-	public function continue_migration( string $batch_id, int $offset, int $chunk = 200 ): array {
+	public function continue_migration( string $batch_id, int $cursor, int $chunk = self::POST_BATCH_SIZE ): array {
 		if ( ! current_user_can( 'ntc_migrate' ) && ! current_user_can( 'manage_options' ) ) {
 			return array(
 				'success' => false,
@@ -188,7 +201,7 @@ final class NTC_Migrator {
 				'batch_id' => $batch_id,
 			);
 		}
-		$result = $this->convert_posts( $map, $batch_id, $offset, $chunk );
+		$result = $this->convert_posts( $map, $batch_id, $cursor, $chunk );
 		return array(
 			'success'             => empty( $result['errors'] ),
 			'posts_updated'       => $result['posts'],
@@ -197,7 +210,8 @@ final class NTC_Migrator {
 			'errors'              => $result['errors'],
 			'posts_total'         => $result['total'],
 			'processed'           => $result['processed'],
-			'posts_remaining'     => max( 0, $result['total'] - $result['processed'] - max( 0, $offset ) ),
+			'posts_remaining'     => $result['remaining'],
+			'next_cursor'         => $result['next_cursor'],
 		);
 	}
 
@@ -520,19 +534,26 @@ final class NTC_Migrator {
 		return match ( $t ) {
 			'digit'=>'number', 'isoDate'=>'iso_date', 'usLongDate'=>'us_long_date', 'shortDate'=>'short_date', default=>sanitize_key( $t ? $t : 'auto' )};}
 
-	private function convert_posts( array $map, string $batch, int $offset = 0, int $chunk = 200 ): array {
+	private function convert_posts( array $map, string $batch, int $cursor = 0, int $chunk = self::POST_BATCH_SIZE ): array {
 		global $wpdb;
-		$chunk = max( 1, min( 1000, $chunk ) );
-		$where = "post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')";
-		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE {$where}" ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
-		$posts = $wpdb->get_results( $wpdb->prepare( "SELECT ID,post_content FROM {$wpdb->posts} WHERE {$where} ORDER BY ID ASC LIMIT %d OFFSET %d", $chunk, max( 0, $offset ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
+		$chunk  = max( 1, min( 100, $chunk ) );
+		$cursor = max( 0, $cursor );
+		$where  = "post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')";
+		$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE {$where}" ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
+		$posts  = $wpdb->get_results( $wpdb->prepare( "SELECT ID,post_content FROM {$wpdb->posts} WHERE {$where} AND ID > %d ORDER BY ID ASC LIMIT %d", $cursor, $chunk ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
 		if ( ! $posts ) {
 			$posts = array();
 		}
 		$updated   = 0;
 		$instances = 0;
 		$errors    = array();
+		$processed = 0;
+		$next      = $cursor;
+		$started   = microtime( true );
 		foreach ( $posts as $p ) {
+			if ( $processed > 0 && microtime( true ) - $started >= self::POST_TIME_BUDGET_SECS ) {
+				break;
+			}
 			$original = $p['post_content'];
 			$new      = $original;
 			$new      = preg_replace_callback(
@@ -584,13 +605,18 @@ final class NTC_Migrator {
 				} else {
 					++$updated;}
 			}
+			$next = max( $next, (int) $p['ID'] );
+			++$processed;
 		}
+		$remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE {$where} AND ID > %d", $next ) ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
 		return array(
 			'posts'     => $updated,
 			'instances' => $instances,
 			'errors'    => $errors,
 			'total'     => $total,
-			'processed' => count( $posts ),
+			'processed'   => $processed,
+			'remaining'   => $remaining,
+			'next_cursor' => $next,
 		);
 	}
 
