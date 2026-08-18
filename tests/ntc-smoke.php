@@ -362,7 +362,7 @@ $assert( 3 === count( $GLOBALS['wpdb']->queries ), 'patch_rows batches 1200 rows
 $assert( 200 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 'patch last statement holds 200 rows' );
 require_once dirname( __DIR__ ) . '/includes/class-ntc-migrator.php';
 $migrator                   = new NTC_Migrator( $repo );
-$assert( 3 === NTC_Migrator::MIGRATION_STATE_VERSION, 'migration rejects incompatible saved progress before continuing' );
+$assert( 4 === NTC_Migrator::MIGRATION_STATE_VERSION, 'migration rejects incompatible saved progress before continuing' );
 $assert( 20 === NTC_Migrator::POST_BATCH_SIZE, 'migration post batches stay below proxy timeout thresholds' );
 $call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
 	$mm = ( new ReflectionClass( 'NTC_Migrator' ) )->getMethod( $m );
@@ -372,6 +372,19 @@ $call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
 $GLOBALS['fake_transients']['ntc_migration_targets_stale-batch'] = array( 'ids' => array( 1 ) );
 $migrator->clear_migration_state( 'stale-batch' );
 $assert( false === get_transient( 'ntc_migration_targets_stale-batch' ), 'migration reset clears an incompatible target snapshot' );
+$GLOBALS['wpdb']->queries             = array();
+$GLOBALS['fake_legacy_schema']        = true;
+$GLOBALS['fake_legacy_table_count']   = 42;
+$GLOBALS['fake_posts']                = array(
+	array(
+		'ID'           => 78,
+		'post_content' => "<!-- wp:shortcode -->\n<!-- wp:ntc/table {\"mode\":\"view\",\"datasetId\":5,\"viewId\":9} /-->\n<!-- /wp:shortcode -->",
+	),
+);
+$repair_detect = $migrator->detect();
+$assert( 1 === $repair_detect['posts'] && 1 === $repair_detect['instances'] && array( 78 ) === $repair_detect['post_ids'], 'migration detection rediscovers posts damaged by nested shortcode wrappers' );
+$assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), "post_content LIKE '%wp:shortcode%' AND post_content LIKE '%wp:ntc/table%'" ), 'migration detection query includes malformed native table wrappers' );
+unset( $GLOBALS['fake_legacy_schema'], $GLOBALS['fake_legacy_table_count'], $GLOBALS['fake_posts'] );
 $GLOBALS['fake_dataset']                = array( 'id' => 42, 'columns_json' => '[]' );
 $GLOBALS['fake_options']                = array( 'ntc_migration_map' => array( 1 => 42, 2 => 42 ) );
 $GLOBALS['fake_transients']['ntc_migration_targets_batch-tables'] = array( 'ids' => array( 7, 9 ), 'instances' => 3 );
@@ -461,6 +474,26 @@ $GLOBALS['wpdb']->queries = array();
 $GLOBALS['fake_posts']    = array( array( 'ID' => 1, 'post_content' => '[lt id="1"]' ) );
 $r3 = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 0, 20, array( 1, 999 ) );
 $assert( 2 === $r3['processed'] && 0 === $r3['remaining'] && 2 === $r3['target_offset'], 'convert_posts advances past a deleted target without scanning for replacements' );
+$GLOBALS['fake_posts'] = array(
+	array(
+		'ID'           => 77,
+		'post_content' => "<!-- wp:shortcode -->\n[lt id=\"1\"]\n<!-- /wp:shortcode -->",
+	),
+);
+$GLOBALS['last_update'] = null;
+$call_m( 'convert_posts', array( 1 => 5 ), 'batch-shortcode-wrapper', 0, 20, array( 77 ) );
+$wrapped_replacement = (string) ( $GLOBALS['last_update'][0]['post_content'] ?? '' );
+$assert( false === strpos( $wrapped_replacement, 'wp:shortcode' ) && false !== strpos( $wrapped_replacement, 'wp:ntc/table' ), 'migration replaces the complete Gutenberg shortcode block wrapper' );
+$GLOBALS['fake_posts'] = array(
+	array(
+		'ID'           => 78,
+		'post_content' => "<!-- wp:shortcode -->\n<!-- wp:ntc/table {\"mode\":\"view\",\"datasetId\":5,\"viewId\":9} /-->\n<!-- /wp:shortcode -->",
+	),
+);
+$GLOBALS['last_update'] = null;
+$call_m( 'convert_posts', array(), 'batch-repair-wrapper', 0, 20, array( 78 ) );
+$repaired_wrapper = (string) ( $GLOBALS['last_update'][0]['post_content'] ?? '' );
+$assert( false === strpos( $repaired_wrapper, 'wp:shortcode' ) && false !== strpos( $repaired_wrapper, 'wp:ntc/table' ), 'migration repairs native table blocks trapped inside shortcode wrappers' );
 $GLOBALS['fake_backup_count'] = 450;
 $GLOBALS['fake_backups']      = array();
 for ( $i = 0; $i < 200; $i++ ) {

@@ -206,6 +206,12 @@ $GLOBALS['wpdb'] = new class() {
 	public $queries     = array();
 	public function get_var( $q ) {
 		$this->queries[] = $q;
+		if ( false !== strpos( $q, 'SHOW TABLES LIKE' ) && ! empty( $GLOBALS['fake_legacy_schema'] ) && preg_match( "/LIKE '([^']+)'/", $q, $table_match ) ) {
+			return $table_match[1];
+		}
+		if ( false !== strpos( $q, 'dalt_table' ) && false !== strpos( $q, 'COUNT(*)' ) && false === strpos( $q, 'id >' ) && isset( $GLOBALS['fake_legacy_table_count'] ) ) {
+			return $GLOBALS['fake_legacy_table_count'];
+		}
 		if ( $GLOBALS['fake_slug_taken'] ) {
 			$GLOBALS['fake_slug_taken'] = false;
 			return 7;
@@ -300,7 +306,10 @@ $GLOBALS['wpdb'] = new class() {
 	public function prepare( $q, ...$a ) {
 		if ( $a && ! ( 1 === count( $a ) && is_array( $a[0] ) ) ) {
 			foreach ( $a as $v ) {
-				$q = preg_replace( '/%d/', (string) (int) $v, $q, 1 );
+				if ( preg_match( '/%[ds]/', $q, $placeholder ) ) {
+					$replacement = '%d' === $placeholder[0] ? (string) (int) $v : "'" . addslashes( (string) $v ) . "'";
+					$q           = preg_replace( '/%[ds]/', $replacement, $q, 1 );
+				}
 			}
 		}
 		return $q; }

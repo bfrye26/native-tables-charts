@@ -3,11 +3,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; }
 
 final class NTC_Migrator {
-	public const MIGRATION_STATE_VERSION = 3;
+	public const MIGRATION_STATE_VERSION = 4;
 	public const POST_BATCH_SIZE         = 20;
 	private const TABLE_ROW_BATCH_SIZE   = 200;
 	private const TABLE_CELL_BATCH_SIZE  = 200;
 	private const POST_TIME_BUDGET_SECS  = 12.0;
+	private const LEGACY_SHORTCODE_BLOCK_PATTERN = '~<!--\s+wp:shortcode(?:\s+\{.*?\})?\s*-->\s*\[lt\s+[^\]]*id=["\']?(\d+)["\']?[^\]]*\]\s*<!--\s+\/wp:shortcode\s*-->~is';
+	private const BROKEN_SHORTCODE_BLOCK_PATTERN = '~<!--\s+wp:shortcode(?:\s+\{.*?\})?\s*-->\s*(<!--\s+wp:ntc/table(?:\s+\{.*?\})?\s*\/-->)\s*<!--\s+\/wp:shortcode\s*-->~is';
 
 	private NTC_Repository $repo;
 	public function __construct( NTC_Repository $repo ) {
@@ -43,18 +45,22 @@ final class NTC_Migrator {
 		$instance_count = 0;
 		$post_ids       = array();
 		if ( $count && $include_posts ) {
-			$where = "post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')";
+			$where = "post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%' OR (post_content LIKE '%wp:shortcode%' AND post_content LIKE '%wp:ntc/table%'))";
 			if ( $include_instances ) {
 				$posts = $wpdb->get_results( "SELECT ID,post_content FROM {$wpdb->posts} WHERE {$where}", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
 				if ( ! $posts ) {
 					$posts = array();
 				}
-				$post_count = count( $posts );
 				foreach ( $posts as $p ) {
-					$post_ids[] = (int) $p['ID'];
 					preg_match_all( '/\[lt\s+[^\]]*id=["\']?(\d+)["\']?[^\]]*\]/i', $p['post_content'], $m );
-					$instance_count += count( $m[0] );
-					$instance_count += substr_count( $p['post_content'], 'wp:dalt/table' );}
+					preg_match_all( self::BROKEN_SHORTCODE_BLOCK_PATTERN, $p['post_content'], $broken );
+					$post_instances = count( $m[0] ) + substr_count( $p['post_content'], 'wp:dalt/table' ) + count( $broken[0] );
+					if ( $post_instances > 0 ) {
+						$post_ids[]     = (int) $p['ID'];
+						$instance_count += $post_instances;
+						++$post_count;
+					}
+				}
 			} else {
 				$post_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE {$where}" ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
 			}
@@ -803,6 +809,27 @@ final class NTC_Migrator {
 			$p        = $posts_by_id[ $post_id ];
 			$original = $p['post_content'];
 			$new      = $original;
+			$new      = preg_replace_callback(
+				self::BROKEN_SHORTCODE_BLOCK_PATTERN,
+				function ( $m ) use ( &$instances ) {
+					++$instances;
+					return $m[1];
+				},
+				$new
+			);
+			$new      = preg_replace_callback(
+				self::LEGACY_SHORTCODE_BLOCK_PATTERN,
+				function ( $m ) use ( $map, &$instances ) {
+					$old = (int) $m[1];
+					if ( empty( $map[ $old ] ) ) {
+						return $m[0];
+					}
+					$view = (int) get_option( 'ntc_lt_view_' . $old, 0 );
+					++$instances;
+					return '<!-- wp:ntc/table {"mode":"view","datasetId":' . (int) $map[ $old ] . ',"viewId":' . $view . '} /-->';
+				},
+				$new
+			);
 			$new      = preg_replace_callback(
 				'/\[lt\s+[^\]]*id=["\']?(\d+)["\']?[^\]]*\]/i',
 				function ( $m ) use ( $map, &$instances ) {
