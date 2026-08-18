@@ -98,6 +98,10 @@ function wp_remote_get( $url, $args = array() ) {
 		'response' => array( 'code' => 404 ),
 		'body'     => '',
 	); }
+function wp_safe_remote_get( $url, $args = array() ) {
+	$GLOBALS['safe_remote_args'] = $args;
+	return wp_remote_get( $url, $args );
+}
 function wp_remote_retrieve_response_code( $r ) {
 	return $r['response']['code'] ?? 0; }
 function wp_remote_retrieve_body( $r ) {

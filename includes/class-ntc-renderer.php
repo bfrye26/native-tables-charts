@@ -82,6 +82,9 @@ final class NTC_Renderer {
 			'cellPadding'           => '10px 12px',
 			'borderWidth'           => 1,
 			'borderRadius'          => 0,
+			'frameWidth'            => 0,
+			'frameColor'            => '',
+			'frameRadius'           => 0,
 			'marginTop'             => 20,
 			'marginBottom'          => 20,
 			'headerFontFamily'      => 'inherit',
@@ -147,6 +150,7 @@ final class NTC_Renderer {
 			'heatmapHigh'             => '#624b8e',
 			'heatmapLabels'           => true,
 			'multiplesPerRow'         => 3,
+			'histogramBins'           => 8,
 			'unit'                    => '',
 			'decimals'                => 'auto',
 			'showValues'              => true,
@@ -472,6 +476,106 @@ final class NTC_Renderer {
 				'typographyPreset' => 'compact',
 				'density'          => 'compact',
 			),
+			'dashboard'         => array(
+				'background'       => '#f7f9fc',
+				'primaryColor'     => '#2563eb',
+				'secondaryColor'   => '#06b6d4',
+				'highlightColor'   => '#db2777',
+				'textColor'        => '#172033',
+				'mutedColor'       => '#5f6b7a',
+				'gridColor'        => '#dce3ed',
+				'typographyPreset' => 'compact',
+				'density'          => 'compact',
+			),
+			'accessible'        => array(
+				'background'       => '#ffffff',
+				'primaryColor'     => '#005a9c',
+				'secondaryColor'   => '#b35c00',
+				'highlightColor'   => '#7a1f5c',
+				'textColor'        => '#111111',
+				'mutedColor'       => '#444444',
+				'gridColor'        => '#767676',
+				'typographyPreset' => 'comfortable',
+				'density'          => 'comfortable',
+			),
+			'print-grayscale'   => array(
+				'background'       => '#ffffff',
+				'primaryColor'     => '#202020',
+				'secondaryColor'   => '#707070',
+				'highlightColor'   => '#000000',
+				'textColor'        => '#000000',
+				'mutedColor'       => '#4a4a4a',
+				'gridColor'        => '#b5b5b5',
+				'typographyPreset' => 'compact',
+				'density'          => 'comfortable',
+				'customClass'      => 'ntc-chart-print-grayscale',
+			),
+			'financial'         => array(
+				'background'       => '#07150f',
+				'primaryColor'     => '#22c55e',
+				'secondaryColor'   => '#f59e0b',
+				'highlightColor'   => '#ef4444',
+				'textColor'        => '#ecfdf5',
+				'mutedColor'       => '#9fb7aa',
+				'gridColor'        => '#244438',
+				'typographyPreset' => 'compact',
+				'density'          => 'compact',
+			),
+			'scientific'        => array(
+				'background'       => '#fbfdff',
+				'primaryColor'     => '#075985',
+				'secondaryColor'   => '#0f766e',
+				'highlightColor'   => '#9f1239',
+				'textColor'        => '#102a43',
+				'mutedColor'       => '#486581',
+				'gridColor'        => '#bcccdc',
+				'typographyPreset' => 'compact',
+				'density'          => 'comfortable',
+			),
+			'soft-neutral'      => array(
+				'background'       => '#f5f3f0',
+				'primaryColor'     => '#556b70',
+				'secondaryColor'   => '#8a716a',
+				'highlightColor'   => '#8b3f58',
+				'textColor'        => '#292724',
+				'mutedColor'       => '#6f6a63',
+				'gridColor'        => '#d8d2cb',
+				'typographyPreset' => 'comfortable',
+				'density'          => 'comfortable',
+			),
+			'high-impact-dark'  => array(
+				'background'       => '#05070b',
+				'primaryColor'     => '#8b5cf6',
+				'secondaryColor'   => '#22d3ee',
+				'highlightColor'   => '#f43f5e',
+				'textColor'        => '#ffffff',
+				'mutedColor'       => '#b7c0ce',
+				'gridColor'        => '#2d3748',
+				'typographyPreset' => 'presentation',
+				'density'          => 'spacious',
+			),
+			'brand-inherit'     => array(
+				'background'       => 'transparent',
+				'primaryColor'     => 'var(--wp--preset--color--primary,#3858e9)',
+				'secondaryColor'   => 'var(--wp--preset--color--secondary,#64748b)',
+				'highlightColor'   => 'var(--wp--preset--color--accent,#9e2f5f)',
+				'textColor'        => 'currentColor',
+				'mutedColor'       => 'color-mix(in srgb,currentColor 68%,transparent)',
+				'gridColor'        => 'color-mix(in srgb,currentColor 24%,transparent)',
+				'typographyPreset' => 'comfortable',
+				'density'          => 'auto',
+			),
+			'compact-mobile'    => array(
+				'background'       => '#ffffff',
+				'primaryColor'     => '#4338ca',
+				'secondaryColor'   => '#0891b2',
+				'highlightColor'   => '#be185d',
+				'textColor'        => '#111827',
+				'mutedColor'       => '#596579',
+				'gridColor'        => '#d7dce4',
+				'typographyPreset' => 'compact',
+				'density'          => 'compact',
+			),
 		);
 	}
 
@@ -649,7 +753,12 @@ final class NTC_Renderer {
 			$legacy_align = sanitize_key( (string) ( $attributes['align'] ?? '' ) );
 			$width_mode   = in_array( $legacy_align, array( 'wide', 'full' ), true ) ? $legacy_align : 'content';
 		}
-		$classes = array( 'ntc-table-wrap', 'ntc-width-' . $width_mode, 'ntc-responsive-' . sanitize_html_class( (string) $config['responsiveMode'] ) );
+		$classes     = array( 'ntc-table-wrap', 'ntc-width-' . $width_mode, 'ntc-responsive-' . sanitize_html_class( (string) $config['responsiveMode'] ) );
+		$table_width = trim( (string) $config['width'] );
+		$min_width   = is_numeric( $config['minWidth'] ) ? absint( $config['minWidth'] ) : -1;
+		if ( count( $columns ) <= 3 && 0 === $min_width && ( '' === $table_width || '100%' === $table_width ) ) {
+			$classes[] = 'ntc-table-fits';
+		}
 		if ( 'wide' === $width_mode ) {
 			$classes[] = 'alignwide';
 		} elseif ( 'full' === $width_mode ) {
@@ -661,7 +770,7 @@ final class NTC_Renderer {
 			array(
 				'id'    => $id,
 				'class' => implode( ' ', $classes ),
-				'style' => $this->table_vars( $config ) . 'margin-top:' . absint( $config['marginTop'] ) . 'px;margin-bottom:' . absint( $config['marginBottom'] ) . 'px;',
+				'style' => $this->table_vars( $config ) . 'border:' . min( 12, absint( $config['frameWidth'] ?? 0 ) ) . 'px solid ' . self::safe_css_value( (string) ( $config['frameColor'] ?: $config['borderColor'] ?: 'transparent' ) ) . ';border-radius:' . min( 60, absint( $config['frameRadius'] ?? 0 ) ) . 'px;margin-top:' . absint( $config['marginTop'] ) . 'px;margin-bottom:' . absint( $config['marginBottom'] ) . 'px;',
 			)
 		);
 		$out                = '<div ' . $wrapper_attributes . '>' . $css;
@@ -1198,7 +1307,7 @@ final class NTC_Renderer {
 		$typography         = (string) ( $config['typographyPreset'] ?? 'comfortable' );
 		$typography_presets = self::chart_typography_presets();
 		if ( 'custom' !== $typography && isset( $typography_presets[ $typography ] ) ) {
-			$config = array_merge( $config, $typography_presets[ $typography ], array_intersect_key( $config, array_flip( array( 'background', 'primaryColor', 'secondaryColor', 'highlightColor', 'textColor', 'mutedColor', 'gridColor', 'customClass', 'accessibleDataMode', 'chartType', 'title', 'subtitle', 'direction', 'directionLabel', 'legendLabel', 'axisLabel', 'sortLabel', 'labelColumn', 'valueColumns', 'sortColumn', 'sortDirection', 'highlightValues', 'allowMultipleHighlights', 'unit', 'decimals', 'showValues', 'showAxis', 'showGrid', 'footer', 'secondaryFooter', 'source', 'aspectRatio', 'mobileBreakpoint', 'preset', 'typographyPreset', 'density' ) ) ) );}
+			$config = array_merge( $config, $typography_presets[ $typography ], array_intersect_key( $config, array_flip( array( 'background', 'primaryColor', 'secondaryColor', 'highlightColor', 'textColor', 'mutedColor', 'gridColor', 'customClass', 'accessibleDataMode', 'chartType', 'title', 'subtitle', 'direction', 'directionLabel', 'legendLabel', 'axisLabel', 'sortLabel', 'labelColumn', 'valueColumns', 'xColumn', 'sortColumn', 'sortDirection', 'highlightValues', 'allowMultipleHighlights', 'unit', 'decimals', 'showValues', 'showAxis', 'showGrid', 'footer', 'secondaryFooter', 'source', 'aspectRatio', 'mobileBreakpoint', 'preset', 'typographyPreset', 'density', 'histogramBins' ) ) ) );}
 		$density         = (string) ( $config['density'] ?? 'auto' );
 		$density_presets = self::chart_density_presets();
 		if ( 'auto' === $density ) {
@@ -1276,7 +1385,7 @@ final class NTC_Renderer {
 				$out .= '<div class="ntc-chart-sort-label">' . esc_html( $config['sortLabel'] ) . '</div>';
 			}$out .= '</div>';}
 		$value_cols = array_slice( array_map( 'absint', (array) ( $config['valueColumns'] ?? array() ) ), 0, 6 );
-		if ( count( $value_cols ) > 1 && in_array( $type, array( 'grouped-bar', 'stacked-bar', 'line', 'scatter', 'area' ), true ) ) {
+		if ( count( $value_cols ) > 1 && in_array( $type, array( 'grouped-bar', 'stacked-bar', 'line', 'scatter', 'area', 'combo', 'boxplot', 'bullet', 'bubble', 'range-bar', 'timeline', 'slope', 'candlestick', 'error-bar', 'population-pyramid', 'likert', 'streamgraph', 'parallel-coordinates' ), true ) ) {
 			$out .= '<div class="ntc-series-legend">';
 			foreach ( $value_cols as $si => $v ) {
 				if ( ! empty( $config['legendToggles'] ) ) {
@@ -1332,6 +1441,32 @@ final class NTC_Renderer {
 			case 'heatmap':
 				$out .= $this->chart_heatmap( $chart_rows, $columns, $config );
 				break;
+			case 'combo':
+			case 'histogram':
+			case 'boxplot':
+			case 'waterfall':
+			case 'bullet':
+			case 'bubble':
+			case 'funnel':
+			case 'range-bar':
+			case 'timeline':
+			case 'slope':
+			case 'treemap':
+			case 'sunburst':
+			case 'sankey':
+			case 'candlestick':
+			case 'error-bar':
+			case 'calendar-heatmap':
+			case 'population-pyramid':
+			case 'likert':
+			case 'pareto':
+			case 'streamgraph':
+			case 'parallel-coordinates':
+			case 'network':
+			case 'choropleth':
+			case 'polar-area':
+				$out .= NTC_Advanced_Charts::render( $type, $chart_rows, $columns, $config );
+				break;
 			case 'horizontal-bar':
 			default:
 				$out .= $this->chart_horizontal( $chart_rows, $columns, $config );
@@ -1362,7 +1497,7 @@ final class NTC_Renderer {
 		} elseif ( 'screenreader' === $data_mode ) {
 			$out .= '<div class="ntc-chart-data-sr ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';}
 		if ( ! empty( $config['enableExport'] ) ) {
-			$png  = in_array( $type, array( 'donut', 'line', 'scatter', 'area' ), true );
+			$png  = in_array( $type, array_merge( array( 'donut', 'line', 'scatter', 'area' ), NTC_Advanced_Charts::types() ), true );
 			$out .= '<div class="ntc-chart-tools"><button type="button" class="ntc-export-btn" data-format="csv">' . esc_html__( 'Download CSV', 'native-tables-charts' ) . '</button>' . ( $png ? '<button type="button" class="ntc-export-btn" data-format="png">' . esc_html__( 'Download PNG', 'native-tables-charts' ) . '</button>' : '' ) . '</div>';
 			if ( 'disabled' === $data_mode ) {
 				$out .= '<div class="ntc-chart-export-data ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';}
@@ -2029,6 +2164,9 @@ final class NTC_Renderer {
 	private function accessible_chart_table( array $rows, array $columns, array $c ): string {
 		$l    = absint( $c['labelColumn'] );
 		$vals = array_map( 'absint', (array) $c['valueColumns'] );
+		if ( null !== ( $c['xColumn'] ?? null ) && absint( $c['xColumn'] ) !== $l && ! in_array( absint( $c['xColumn'] ), $vals, true ) ) {
+			array_unshift( $vals, absint( $c['xColumn'] ) );
+		}
 		if ( ! $vals ) {
 			$vals = array( 1 );
 		}$out = '<table><thead><tr><th scope="col">' . esc_html( $columns[ $l ]['label'] ?? __( 'Item', 'native-tables-charts' ) ) . '</th>';

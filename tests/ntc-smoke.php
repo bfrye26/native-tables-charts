@@ -37,6 +37,7 @@ $GLOBALS['fake_http'] = array(
 	'body'     => "a,b\n1,2",
 );
 $assert( "a,b\n1,2" === NTC_Sync::fetch( 'https://example.com/x.csv' ), 'fetch returns body' );
+$assert( NTC_Sync::MAX_BYTES + 1 === $GLOBALS['safe_remote_args']['limit_response_size'], 'fetch limits the remote response during download' );
 $GLOBALS['fake_http'] = array(
 	'response' => array( 'code' => 404 ),
 	'body'     => '',
@@ -287,6 +288,42 @@ $table_html = $call(
 	)
 );
 $assert( false !== strpos( $table_html, '<thead' ) && false !== strpos( $table_html, '<tbody' ), 'render_table computes heat before header' );
+$assert( false !== strpos( $table_html, 'ntc-table-fits' ), 'simple tables suppress an unnecessary horizontal scrollbar' );
+$assert( false !== strpos( $table_html, 'border:0px solid' ), 'table outer frame is disabled by default' );
+$assert( false === strpos( $table_html, 'ntc-table-search' ), 'table search is hidden by default' );
+$assert( false === strpos( $table_html, 'ntc-export-btn' ), 'table CSV download is hidden by default' );
+$assert( false === strpos( $table_html, 'ntc-table-pager' ), 'table pagination is hidden by default' );
+$controls_html = $call(
+	'render_table',
+	array(
+		'columns' => array(
+			array(
+				'id'    => 'c1',
+				'label' => 'A',
+				'type'  => 'auto',
+				'unit'  => '',
+			),
+		),
+		'rows'    => array( array( 'a' ) ),
+		'config'  => array(
+			'enableSearch'     => true,
+			'enablePagination' => true,
+			'enableExport'     => true,
+		),
+	)
+);
+$assert( false !== strpos( $controls_html, 'ntc-table-search' ), 'table search renders when enabled' );
+$assert( false !== strpos( $controls_html, 'ntc-export-btn' ), 'table CSV download renders when enabled' );
+$assert( false !== strpos( $controls_html, 'ntc-table-pager' ), 'table pagination renders when enabled' );
+$framed_table = $call(
+	'render_table',
+	array(
+		'columns' => array( array( 'id' => 'c1', 'label' => 'A', 'type' => 'text', 'unit' => '' ) ),
+		'rows'    => array( array( 'a' ) ),
+		'config'  => array( 'frameWidth' => 4, 'frameColor' => '#123456', 'frameRadius' => 8 ),
+	)
+);
+$assert( false !== strpos( $framed_table, 'border:4px solid #123456' ) && false !== strpos( $framed_table, 'border-radius:8px' ), 'table outer frame renders only when configured' );
 $assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '<svg' ), 'sparkline renders svg' );
 $assert( false !== strpos( $call( 'render_cell', '10,20,30', array(), array(), false, 'sparkline' ), '10,20,30' ), 'sparkline keeps raw value (sr-only)' );
 $assert( false !== strpos( $call( 'render_cell', '+12.5%', array(), array(), false, 'delta' ), 'is-up' ), 'delta positive class' );
@@ -967,6 +1004,43 @@ $heatmap_chart = $call(
 	)
 );
 $assert( false !== strpos( $heatmap_chart, 'ntc-heatmap' ), 'render_chart dispatches heatmap type' );
+$assert( 24 === count( NTC_Advanced_Charts::types() ), 'advanced chart suite exposes 24 specialized types' );
+$release_presets = NTC_Renderer::chart_presets();
+foreach ( array( 'editorial-light', 'dashboard', 'accessible', 'print-grayscale', 'financial', 'scientific', 'soft-neutral', 'high-impact-dark', 'brand-inherit', 'compact-mobile' ) as $release_preset ) {
+	$assert( isset( $release_presets[ $release_preset ] ), 'chart preset exists: ' . $release_preset );
+}
+$advanced_columns = array(
+	array( 'id' => 'label', 'label' => 'Label', 'type' => 'text', 'unit' => '' ),
+	array( 'id' => 'one', 'label' => 'One', 'type' => 'number', 'unit' => '' ),
+	array( 'id' => 'two', 'label' => 'Two', 'type' => 'number', 'unit' => '' ),
+	array( 'id' => 'three', 'label' => 'Three', 'type' => 'number', 'unit' => '' ),
+	array( 'id' => 'four', 'label' => 'Four', 'type' => 'number', 'unit' => '' ),
+	array( 'id' => 'five', 'label' => 'Five', 'type' => 'number', 'unit' => '' ),
+);
+$advanced_rows = array(
+	array( 'A', 10, 20, 30, 40, 50 ),
+	array( 'B', 20, 35, 45, 55, 65 ),
+	array( 'C', 15, 25, 38, 48, 70 ),
+	array( 'D', 30, 42, 52, 66, 80 ),
+);
+foreach ( NTC_Advanced_Charts::types() as $advanced_type ) {
+	$advanced_html = $call(
+		'render_chart',
+		array(
+			'columns' => $advanced_columns,
+			'rows'    => $advanced_rows,
+			'config'  => array(
+				'chartType'     => $advanced_type,
+				'labelColumn'   => 0,
+				'xColumn'       => 1,
+				'valueColumns'  => array( 1, 2, 3, 4, 5 ),
+				'sortDirection' => 'none',
+			),
+		)
+	);
+	$assert( false !== strpos( $advanced_html, 'data-chart-type="' . $advanced_type . '"' ), 'render_chart dispatches ' . $advanced_type );
+	$assert( '' !== trim( NTC_Advanced_Charts::render( $advanced_type, $advanced_rows, $advanced_columns, array( 'labelColumn' => 0, 'xColumn' => 1, 'valueColumns' => array( 1, 2, 3, 4, 5 ) ) ) ), 'advanced renderer produces output: ' . $advanced_type );
+}
 $area_chart = $call(
 	'render_chart',
 	array(
