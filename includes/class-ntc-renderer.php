@@ -183,6 +183,7 @@ final class NTC_Renderer {
 			'customClass'             => '',
 			'enableExport'            => false,
 			'enableTooltips'          => false,
+			'legendToggles'           => false,
 			'enableSchema'            => false,
 			'schemaType'              => 'off',
 			'ratingMin'               => 0,
@@ -1260,8 +1261,13 @@ final class NTC_Renderer {
 		if ( count( $value_cols ) > 1 && in_array( $type, array( 'grouped-bar', 'stacked-bar', 'line', 'scatter' ), true ) ) {
 			$out .= '<div class="ntc-series-legend">';
 			foreach ( $value_cols as $si => $v ) {
-				/* translators: %d: series number. */
-				$out .= '<span><i class="ntc-series-' . ( $si % 6 ) . '" aria-hidden="true"></i>' . esc_html( $columns[ $v ]['label'] ?? sprintf( __( 'Series %d', 'native-tables-charts' ), $si + 1 ) ) . '</span>';
+				if ( ! empty( $config['legendToggles'] ) ) {
+					/* translators: %d: series number. */
+					$out .= '<button type="button" class="ntc-legend-toggle" data-series="' . $si . '" aria-pressed="true"><i class="ntc-series-' . ( $si % 6 ) . '" aria-hidden="true"></i>' . esc_html( $columns[ $v ]['label'] ?? sprintf( __( 'Series %d', 'native-tables-charts' ), $si + 1 ) ) . '</button>';
+				} else {
+					/* translators: %d: series number. */
+					$out .= '<span><i class="ntc-series-' . ( $si % 6 ) . '" aria-hidden="true"></i>' . esc_html( $columns[ $v ]['label'] ?? sprintf( __( 'Series %d', 'native-tables-charts' ), $si + 1 ) ) . '</span>';
+				}
 			}$out .= '</div>';
 		}
 		$out .= '<div class="ntc-chart-body">';
@@ -1487,7 +1493,7 @@ final class NTC_Renderer {
 			if ( ! $hl ) {
 				$fill .= ';background:' . esc_attr( $this->series_color( $val, $v, $c, 'var(--ntc-primary)' ) );
 			}
-			$out .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="' . $fill . '"></span>' . $ref . '</div>';
+			$out .= '<div class="ntc-hbar-row ntc-series-0' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="' . $fill . '"></span>' . $ref . '</div>';
 			if ( $c['showValues'] ) {
 				$out .= '<div class="ntc-hbar-value">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</div>';
 			}$out .= '</div>';}
@@ -1511,7 +1517,7 @@ final class NTC_Renderer {
 				$pct   = max( 0, min( 100, ( $val / $max ) * 100 ) );
 				$hl    = $this->is_highlight( $label, $c );
 				$aria  = $label . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() );
-				$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span>' . $ref . '</div>';
+				$out  .= '<div class="ntc-hbar-row ntc-series-0' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span>' . $ref . '</div>';
 				if ( $c['showValues'] ) {
 					$out .= '<div class="ntc-hbar-value">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</div>';
 				}$out .= '</div>';
@@ -1769,7 +1775,12 @@ final class NTC_Renderer {
 				$legend .= ' — ' . $this->format_value( $row[ $v ] ?? 0, $c, $columns[ $v ] ?? array() );
 			}$hl          = $this->is_highlight( (string) ( $row[ $l ] ?? '' ), $c );
 			$legend_color = $hl ? 'var(--ntc-highlight)' : $this->series_color( $row[ $v ] ?? 0, $v, $c, $colors[ $i % count( $colors ) ] );
-			$out         .= '<span class="' . ( $hl ? 'is-highlight' : '' ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( (string) ( $row[ $l ] ?? '' ), $row[ $v ] ?? 0, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</span>';
+			$tip          = ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( (string) ( $row[ $l ] ?? '' ), $row[ $v ] ?? 0, $columns[ $v ] ?? array(), $c ) . '"' : '';
+			if ( ! empty( $c['legendToggles'] ) ) {
+				$out .= '<button type="button" class="ntc-legend-toggle' . ( $hl ? ' is-highlight' : '' ) . '" data-series="' . $i . '" aria-pressed="true"' . $tip . '><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</button>';
+			} else {
+				$out .= '<span class="' . ( $hl ? 'is-highlight' : '' ) . '"' . $tip . '><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</span>';
+			}
 		}$out .= '</div></div>';
 		return $out;
 	}

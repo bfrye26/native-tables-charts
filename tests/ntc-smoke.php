@@ -385,6 +385,7 @@ $assert( false !== strpos( $radar_two_rows, 'ntc-chart-empty-note' ), 'radar sho
 $assert( 0 === NTC_Renderer::chart_defaults()['radarMax'], 'chart_defaults includes radarMax 0' );
 $assert( 0 === NTC_Renderer::chart_defaults()['gaugeMin'] && 100 === NTC_Renderer::chart_defaults()['gaugeMax'], 'chart_defaults includes gaugeMin 0 and gaugeMax 100' );
 $assert( array() === NTC_Renderer::chart_defaults()['seriesRules'], 'chart_defaults includes seriesRules' );
+$assert( false === NTC_Renderer::chart_defaults()['legendToggles'], 'chart_defaults includes legendToggles false' );
 $series_cfg = array(
 	'seriesRules' => array(
 		array(

@@ -107,6 +107,14 @@ var showTip=function(el){
 };
 fig.addEventListener('mouseover',function(e){var el=e.target.closest('[data-tip]');if(el)showTip(el);});
 fig.addEventListener('mouseout',function(e){if(e.target.closest('[data-tip]'))tip.style.display='none';});
+var toggles=fig.querySelectorAll('.ntc-legend-toggle');
+Array.prototype.forEach.call(toggles,function(btn){
+	btn.addEventListener('click',function(){
+		var s=btn.dataset.series;var on=btn.getAttribute('aria-pressed')==='true';
+		btn.setAttribute('aria-pressed',on?'false':'true');
+		fig.classList.toggle('ntc-hide-series-'+s,on);
+	});
+});
 }
 document.addEventListener('DOMContentLoaded',function(){
 	document.querySelectorAll('.ntc-table').forEach(ntcBindTable);
