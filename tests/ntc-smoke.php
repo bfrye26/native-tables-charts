@@ -467,6 +467,17 @@ $change = $call(
 );
 $assert( false !== strpos( $change, 'ntc-change-bar is-up' ), 'change bars render up delta' );
 $assert( false !== strpos( $change, 'ntc-change-bar is-down' ), 'change bars render down delta' );
+$flat_change = $call(
+	'chart_change',
+	array( array( 'C', '50', '50' ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1, 2 ),
+	)
+);
+$assert( false !== strpos( $flat_change, 'ntc-change-value is-flat' ), 'change bars render flat state for zero delta' );
+$assert( false === strpos( $flat_change, 'is-up' ), 'zero delta change bar has no up state' );
 $dumbbell = $call(
 	'chart_dumbbell',
 	array( array( 'A', '10', '30' ), array( 'B', '5', '8' ) ),

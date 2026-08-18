@@ -1530,7 +1530,7 @@ final class NTC_Renderer {
 			$prev  = NTC_Formulas::numeric( $r[ $vals[1] ] ?? 0 );
 			$delta = $cur - $prev;
 			$hl    = $this->is_highlight( $label, $c );
-			$side  = $delta >= 0 ? 'is-up' : 'is-down';
+			$side  = $delta > 0 ? 'is-up' : ( $delta < 0 ? 'is-down' : 'is-flat' );
 			$half  = ( $delta / ( 2 * $max ) ) * 100;
 			$left  = $delta >= 0 ? 50 : 50 + $half;
 			$width = abs( $half );
