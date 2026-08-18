@@ -39,6 +39,8 @@ final class NTC_Activator {
 			source_url VARCHAR(2048) NOT NULL DEFAULT '',
 			source_last_sync DATETIME NULL,
 			source_error TEXT NULL,
+			source_mode VARCHAR(16) NOT NULL DEFAULT '',
+			source_config LONGTEXT NULL,
 			PRIMARY KEY (id),
 			KEY updated_at (updated_at),
 			KEY author_id (author_id)

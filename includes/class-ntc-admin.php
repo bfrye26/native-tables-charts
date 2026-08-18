@@ -214,6 +214,16 @@ final class NTC_Admin {
 			set_transient( 'ntc_tools_result_' . get_current_user_id(), $result, 30 * MINUTE_IN_SECONDS );
 			$this->redirect( 'ntc-data', 'source=1' );
 		}
+		if ( 'update_post_source' === $action && current_user_can( 'ntc_import' ) ) {
+			$mode   = 'posts' === sanitize_key( wp_unslash( $_POST['source_mode'] ?? '' ) ) ? 'posts' : '';
+			$config = array(
+				'post_type'  => sanitize_key( wp_unslash( $_POST['post_type'] ?? 'post' ) ),
+				'meta_label' => sanitize_text_field( wp_unslash( $_POST['meta_label'] ?? '' ) ),
+				'meta_value' => array_values( array_filter( array_map( 'trim', explode( ',', (string) wp_unslash( $_POST['meta_value'] ?? '' ) ) ) ) ),
+			);
+			$this->repo->set_post_source( absint( $_POST['dataset_id'] ?? 0 ), $mode, $config );
+			$this->redirect( 'ntc-data', 'source=1' );
+		}
 	}
 
 	private function redirect( string $page, string $query = '' ): void {
@@ -423,7 +433,11 @@ endif;
 			<?php
 			if ( ! empty( $d['source_last_sync'] ?? '' ) ) :
 				?>
-	<div class="description"><?php esc_html_e( 'Synced:', 'native-tables-charts' ); ?> <?php echo esc_html( get_date_from_gmt( $d['source_last_sync'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></div><?php endif; ?></td><td><?php echo esc_html( $d['row_count'] ); ?></td><td><?php echo esc_html( $d['view_count'] ); ?>
+	<div class="description"><?php esc_html_e( 'Synced:', 'native-tables-charts' ); ?> <?php echo esc_html( get_date_from_gmt( $d['source_last_sync'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></div><?php endif; ?>
+			<?php
+			if ( 'posts' === ( $d['source_mode'] ?? '' ) ) :
+				?>
+	<span class="ntc-source-badge"><?php esc_html_e( 'Posts', 'native-tables-charts' ); ?></span><?php endif; ?></td><td><?php echo esc_html( $d['row_count'] ); ?></td><td><?php echo esc_html( $d['view_count'] ); ?>
 			<?php
 			if ( ! empty( $view_counts[ $id ] ) ) :
 				?>
@@ -459,7 +473,13 @@ endif;
 			<?php
 			if ( current_user_can( 'manage_options' ) ) :
 				?>
-<form method="post" class="ntc-inline-form ntc-source-form"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="update_source"><input type="hidden" name="dataset_id" value="<?php echo esc_attr( $id ); ?>"><input type="url" name="source_url" value="<?php echo esc_attr( $d['source_url'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'CSV/TSV source URL…', 'native-tables-charts' ); ?>" class="ntc-source-input"><button class="button"><?php esc_html_e( 'Save URL', 'native-tables-charts' ); ?></button></form> <form method="post" class="ntc-inline-form"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="refresh_source"><input type="hidden" name="dataset_id" value="<?php echo esc_attr( $id ); ?>"><button class="button" <?php disabled( empty( $d['source_url'] ?? '' ) ); ?>><?php esc_html_e( 'Refresh now', 'native-tables-charts' ); ?></button></form> <?php endif; ?> <form method="post" class="ntc-inline-form" onsubmit="return confirm('<?php echo esc_js( __( 'Delete this dataset and its synced views?', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="delete_dataset"><input type="hidden" name="dataset_id" value="<?php echo esc_attr( $id ); ?>"><button class="button button-link-delete"><?php esc_html_e( 'Delete', 'native-tables-charts' ); ?></button></form></td></tr><?php endforeach; ?>
+<form method="post" class="ntc-inline-form ntc-source-form"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="update_source"><input type="hidden" name="dataset_id" value="<?php echo esc_attr( $id ); ?>"><input type="url" name="source_url" value="<?php echo esc_attr( $d['source_url'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'CSV/TSV source URL…', 'native-tables-charts' ); ?>" class="ntc-source-input"><button class="button"><?php esc_html_e( 'Save URL', 'native-tables-charts' ); ?></button></form> <form method="post" class="ntc-inline-form"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="refresh_source"><input type="hidden" name="dataset_id" value="<?php echo esc_attr( $id ); ?>"><button class="button" <?php disabled( empty( $d['source_url'] ?? '' ) ); ?>><?php esc_html_e( 'Refresh now', 'native-tables-charts' ); ?></button></form> <?php endif; ?>
+			<?php
+			if ( current_user_can( 'ntc_import' ) ) :
+				$post_cfg = json_decode( (string) ( $d['source_config'] ?? '' ), true );
+				$post_cfg = is_array( $post_cfg ) ? $post_cfg : array();
+				?>
+<form method="post" class="ntc-inline-form ntc-source-form"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="update_post_source"><input type="hidden" name="dataset_id" value="<?php echo esc_attr( $id ); ?>"><select name="source_mode"><option value="" <?php selected( '' === ( $d['source_mode'] ?? '' ) ); ?>><?php esc_html_e( 'None', 'native-tables-charts' ); ?></option><option value="posts" <?php selected( 'posts' === ( $d['source_mode'] ?? '' ) ); ?>><?php esc_html_e( 'Posts', 'native-tables-charts' ); ?></option></select><input type="text" name="post_type" value="<?php echo esc_attr( $post_cfg['post_type'] ?? 'post' ); ?>" placeholder="<?php esc_attr_e( 'Post type…', 'native-tables-charts' ); ?>"><input type="text" name="meta_label" value="<?php echo esc_attr( $post_cfg['meta_label'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'Label meta key…', 'native-tables-charts' ); ?>"><input type="text" name="meta_value" value="<?php echo esc_attr( implode( ',', (array) ( $post_cfg['meta_value'] ?? array() ) ) ); ?>" placeholder="<?php esc_attr_e( 'Value meta keys (CSV)…', 'native-tables-charts' ); ?>"><button class="button"><?php esc_html_e( 'Save Post Source', 'native-tables-charts' ); ?></button></form> <?php endif; ?> <form method="post" class="ntc-inline-form" onsubmit="return confirm('<?php echo esc_js( __( 'Delete this dataset and its synced views?', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="delete_dataset"><input type="hidden" name="dataset_id" value="<?php echo esc_attr( $id ); ?>"><button class="button button-link-delete"><?php esc_html_e( 'Delete', 'native-tables-charts' ); ?></button></form></td></tr><?php endforeach; ?>
 		</tbody></table></div>
 		<?php
 	}

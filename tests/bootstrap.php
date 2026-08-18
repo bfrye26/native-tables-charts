@@ -48,6 +48,7 @@ function current_time( $f, $g = false ) {
 function get_current_user_id() {
 	return 1; }
 function get_option( $k, $d = false ) {
+	$GLOBALS['asked_options'][] = $k;
 	return $d; }
 function get_date_from_gmt( $t, $f = '' ) {
 	return (string) $t; }
@@ -168,6 +169,19 @@ function get_transient( $transient ) {
 	return $GLOBALS['fake_transients'][ $transient ] ?? false; }
 function wp_unslash( $value ) {
 	return $value; }
+function get_posts( $args = array() ) {
+	return $GLOBALS['fake_wp_posts'] ?? array(); }
+function get_post_meta( $id, $key = '', $single = false ) {
+	return $GLOBALS['fake_meta'][ $id ][ $key ][0] ?? ''; }
+function get_the_title( $post = null ) {
+	return is_object( $post ) ? $post->post_title : (string) $post; }
+class WP_Post {
+	public $ID;
+	public $post_title;
+	public function __construct( $id, $title ) {
+		$this->ID         = $id;
+		$this->post_title = $title; }
+}
 $GLOBALS['wpdb'] = new class() {
 	public $prefix      = 'wp_';
 	public $posts       = 'wp_posts';
@@ -188,6 +202,12 @@ $GLOBALS['wpdb'] = new class() {
 		}
 		return null; }
 	public function get_row( $q, $o = 'OBJECT' ) {
+		if ( false !== strpos( $q, 'source_mode' ) && isset( $GLOBALS['fake_post_source'] ) ) {
+			return $GLOBALS['fake_post_source'];
+		}
+		if ( false !== strpos( $q, 'ntc_datasets' ) && isset( $GLOBALS['fake_dataset'] ) ) {
+			return $GLOBALS['fake_dataset'];
+		}
 		return null; }
 	public function get_results( $q, $o = 'OBJECT' ) {
 		$this->queries[] = $q;

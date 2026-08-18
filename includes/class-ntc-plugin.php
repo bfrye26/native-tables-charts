@@ -121,7 +121,8 @@ final class NTC_Plugin {
 		);
 	}
 	public function invalidate_usage_cache(): void {
-		delete_transient( 'ntc_dataset_usage_counts' ); }
+		delete_transient( 'ntc_dataset_usage_counts' );
+		update_option( 'ntc_post_source_version', (int) get_option( 'ntc_post_source_version', 0 ) + 1 ); }
 	public function block_category( array $categories, $context ): array {
 		array_unshift(
 			$categories,

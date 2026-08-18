@@ -711,6 +711,79 @@ $dumbbell_chart = $call(
 	)
 );
 $assert( false !== strpos( $dumbbell_chart, 'ntc-dumbbells' ), 'render_chart dispatches dumbbell type' );
+$GLOBALS['fake_wp_posts'] = array(
+	new WP_Post( 1, 'Post A' ),
+	new WP_Post( 2, 'Post B' ),
+);
+$GLOBALS['fake_meta']     = array(
+	1 => array(
+		'score_label' => array( 'Alpha' ),
+		'score'       => array( '10' ),
+	),
+	2 => array(
+		'score_label' => array( 'Beta' ),
+		'score'       => array( '20' ),
+	),
+);
+$post_rows                = NTC_Posts_Query::rows_for(
+	array(
+		'meta_label'     => 'score_label',
+		'meta_value'     => array( 'score' ),
+		'posts_per_page' => 5,
+	)
+);
+$assert( array( array( 'Alpha', '10' ), array( 'Beta', '20' ) ) === $post_rows, 'posts query maps meta label and value' );
+$title_rows = NTC_Posts_Query::rows_for(
+	array(
+		'meta_value'     => array( 'score' ),
+		'posts_per_page' => 5,
+	)
+);
+$assert( array( array( 'Post A', '10' ), array( 'Post B', '20' ) ) === $title_rows, 'posts query falls back to post title' );
+$assert( $repo->set_post_source( 1, 'posts', array( 'post_type' => 'post' ) ), 'set_post_source returns true' );
+$assert( 'posts' === $GLOBALS['last_update'][0]['source_mode'], 'set_post_source stores mode posts' );
+$assert( '{"post_type":"post"}' === $GLOBALS['last_update'][0]['source_config'], 'set_post_source stores json config' );
+$repo->set_post_source( 1, '', array() );
+$assert( '' === $GLOBALS['last_update'][0]['source_mode'], 'set_post_source empty mode clears source' );
+$assert( null === $GLOBALS['last_update'][0]['source_config'], 'set_post_source empty mode nulls config' );
+$GLOBALS['fake_dataset']     = array(
+	'id'           => 99,
+	'name'         => 'Post Scores',
+	'columns_json' => wp_json_encode(
+		array(
+			array(
+				'id'    => 'c1',
+				'label' => 'Label',
+				'type'  => 'text',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c2',
+				'label' => 'Value',
+				'type'  => 'number',
+				'unit'  => '',
+			),
+		)
+	),
+	'updated_at'   => '2026-08-17 10:00:00',
+);
+$GLOBALS['fake_post_source'] = array(
+	'source_mode'   => 'posts',
+	'source_config' => '{"meta_label":"score_label","meta_value":["score"],"posts_per_page":5}',
+);
+$GLOBALS['asked_options']    = array();
+$post_driven                 = $ntc->shortcode_dataset(
+	array(
+		'id'   => 99,
+		'type' => 'table',
+	)
+);
+$assert( false !== strpos( $post_driven, 'Alpha' ) && false !== strpos( $post_driven, 'Beta' ), 'resolve post source renders post-driven rows' );
+$assert( in_array( 'ntc_post_source_version', $GLOBALS['asked_options'], true ), 'resolve uses version-stamped cache option' );
+$assert( isset( $GLOBALS['fake_transients']['ntc_post_source_99_0'] ) && array( array( 'Alpha', '10' ), array( 'Beta', '20' ) ) === $GLOBALS['fake_transients']['ntc_post_source_99_0'], 'resolve caches post rows under stamped key' );
+unset( $GLOBALS['fake_dataset'], $GLOBALS['fake_post_source'] );
+$ntc->invalidate_usage_cache();
+$assert( 'ntc_post_source_version' === $GLOBALS['last_option'][0] && 1 === $GLOBALS['last_option'][1], 'invalidate_usage_cache bumps version option' );
 $reg = new ReflectionMethod( 'NTC_Plugin', 'register_assets_and_blocks' );
 $reg->invoke( $ntc );
 $assert( isset( $GLOBALS['pattern_slug'] ) && 'ntc/review-card' === $GLOBALS['pattern_slug'], 'review-card pattern registered via register_assets_and_blocks' );

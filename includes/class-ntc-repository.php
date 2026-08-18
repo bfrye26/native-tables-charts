@@ -104,6 +104,34 @@ final class NTC_Repository {
 		);
 	}
 
+	public function get_post_source( int $id ): ?array {
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT source_mode,source_config FROM {$wpdb->prefix}ntc_datasets WHERE id=%d", $id ), ARRAY_A );
+		if ( ! $row ) {
+			return null;
+		}
+		$config = json_decode( (string) $row['source_config'], true );
+		return array(
+			'source_mode'   => (string) $row['source_mode'],
+			'source_config' => is_array( $config ) ? $config : array(),
+		);
+	}
+
+	public function set_post_source( int $id, string $mode, array $config ): bool {
+		global $wpdb;
+		$mode = in_array( $mode, array( '', 'posts' ), true ) ? $mode : '';
+		return false !== $wpdb->update(
+			$wpdb->prefix . 'ntc_datasets',
+			array(
+				'source_mode'   => $mode,
+				'source_config' => 'posts' === $mode ? wp_json_encode( $this->sanitize_config( $config ) ) : null,
+			),
+			array( 'id' => $id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+	}
+
 	public function get_rows( int $dataset_id, int $limit = 0, int $offset = 0 ): array {
 		global $wpdb;
 		$sql = $wpdb->prepare( "SELECT row_index,row_json FROM {$wpdb->prefix}ntc_rows WHERE dataset_id=%d ORDER BY row_index ASC", $dataset_id );

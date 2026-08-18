@@ -494,8 +494,20 @@ final class NTC_Renderer {
 		if ( $dataset_id ) {
 			$dataset = $this->repo->get_dataset( $dataset_id, false );
 			if ( $dataset ) {
-				$columns            = $dataset['columns'];
-				$rows               = $this->repo->get_rows( $dataset_id );
+				$columns = $dataset['columns'];
+				$source  = $this->repo->get_post_source( $dataset_id );
+				if ( $source && 'posts' === $source['source_mode'] ) {
+					$cache_key = 'ntc_post_source_' . $dataset_id . '_' . get_option( 'ntc_post_source_version', 0 );
+					$cache     = get_transient( $cache_key );
+					if ( is_array( $cache ) ) {
+						$rows = $cache;
+					} else {
+						$rows = NTC_Posts_Query::rows_for( $source['source_config'] );
+						set_transient( $cache_key, $rows, 5 * MINUTE_IN_SECONDS );
+					}
+				} else {
+					$rows = $this->repo->get_rows( $dataset_id );
+				}
 				$dataset_updated_at = $dataset['updated_at'] ?? null;
 				$dataset_name       = $dataset['name'] ?? null;
 			}
