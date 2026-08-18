@@ -433,6 +433,25 @@ $line_annotations = $call(
 $assert( false !== strpos( $line_annotations, 'ntc-svg-annotation' ), 'chart_line renders annotation marker at label' );
 $assert( false !== strpos( $line_annotations, 'ntc-svg-region' ), 'chart_line renders annotation region A to C' );
 $assert( false === strpos( $line_annotations, 'Nope' ), 'chart_line skips unknown annotation labels' );
+$scatter_annotations = $call(
+	'chart_line',
+	array( array( 'A', 5, 0 ), array( 'B', 10, 1 ), array( 'C', 7, 2 ) ),
+	array( 2 => array( 'type' => 'number' ) ),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'xColumn'      => 2,
+		'annotations'  => array(
+			array(
+				'type' => 'marker',
+				'at'   => 'B',
+			),
+		),
+	),
+	true,
+	false
+);
+$assert( false === strpos( $scatter_annotations, 'ntc-svg-annotation' ), 'chart_line scatter renders no annotations' );
 $donut_series = $call(
 	'chart_donut',
 	array( array( 'A', 30 ), array( 'B', 70 ) ),

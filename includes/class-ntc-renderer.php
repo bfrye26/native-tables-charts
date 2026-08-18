@@ -1726,7 +1726,7 @@ final class NTC_Renderer {
 			}
 		}
 		$out .= $this->svg_ref_lines( $min, $max, $pad_l, $pad_r, $pad_t, $ph, $c );
-		if ( ! empty( $c['annotations'] ) && null !== $xcol && $ticks ) {
+		if ( ! empty( $c['annotations'] ) && null !== $xcol && $ticks && ! $scatter ) {
 			$xmap = array();
 			foreach ( $rows as $i => $r ) {
 				$xv                                  = (float) $this->sort_value( $r[ $xcol ] ?? '', $columns[ $xcol ]['type'] ?? 'auto', $columns[ $xcol ]['format'] ?? '', 'us' );
