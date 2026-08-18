@@ -135,6 +135,7 @@ final class NTC_Renderer {
 			'sortDirection'           => 'desc',
 			'highlightValues'         => array(),
 			'allowMultipleHighlights' => false,
+			'referenceLines'          => array(),
 			'unit'                    => '',
 			'decimals'                => 'auto',
 			'showValues'              => true,
@@ -1326,18 +1327,47 @@ final class NTC_Renderer {
 			$ticks .= '<span>' . esc_html( number_format_i18n( $v, $d ) ) . '</span>';
 		}return '<div class="ntc-hbar-axis"><span aria-hidden="true"></span><div class="ntc-axis-ticks">' . $ticks . '</div><span aria-hidden="true"></span></div>';}
 
+	private function ref_lines( float $max, array $c ): string {
+		$out = '';
+		foreach ( array_slice( (array) ( $c['referenceLines'] ?? array() ), 0, 5 ) as $rl ) {
+			$v = (float) ( $rl['value'] ?? 0 );
+			if ( $v < 0 || $v > $max || $max <= 0 ) {
+				continue; }
+			$pct   = max( 0, min( 100, ( $v / $max ) * 100 ) );
+			$color = self::safe_css_value( $rl['color'] ?? '#ef4444' );
+			$label = (string) ( $rl['label'] ?? '' );
+			$out  .= '<span class="ntc-ref-line" style="left:' . esc_attr( (string) $pct ) . '%;border-color:' . esc_attr( $color ) . '">' . ( '' !== $label ? '<i>' . esc_html( $label ) . '</i>' : '' ) . '</span>';
+		}
+		return $out;
+	}
+
+	private function svg_ref_lines( float $min, float $max, int $pad_l, int $pad_r, int $pad_t, int $ph, array $c ): string {
+		$out = '';
+		foreach ( array_slice( (array) ( $c['referenceLines'] ?? array() ), 0, 5 ) as $rl ) {
+			$v     = (float) ( $rl['value'] ?? 0 );
+			$y     = $pad_t + $ph - ( ( $v - $min ) / ( $max - $min ) ) * $ph;
+			$color = self::safe_css_value( $rl['color'] ?? '#ef4444' );
+			$label = (string) ( $rl['label'] ?? '' );
+			$out  .= '<line x1="' . $pad_l . '" y1="' . round( $y, 1 ) . '" x2="' . ( 1000 - $pad_r ) . '" y2="' . round( $y, 1 ) . '" class="ntc-svg-ref" style="stroke:' . esc_attr( $color ) . '"/>';
+			if ( '' !== $label ) {
+				$out .= '<text x="' . ( 1000 - $pad_r ) . '" y="' . round( $y - 4, 1 ) . '" class="ntc-svg-ref-label" text-anchor="end">' . esc_html( $label ) . '</text>'; }
+		}
+		return $out;
+	}
+
 	private function chart_horizontal( array $rows, array $columns, array $c ): string {
 		$l   = absint( $c['labelColumn'] );
 		$v   = absint( $c['valueColumns'][0] ?? 1 );
 		$max = $this->nice_max( $this->max_for( $rows, $v ) );
 		$out = '<div class="ntc-hbars" role="group" aria-label="' . esc_attr( ! empty( $c['title'] ) ? $c['title'] : __( 'Horizontal bar chart', 'native-tables-charts' ) ) . '">';
+		$ref = $this->ref_lines( $max, $c );
 		foreach ( $rows as $r ) {
 			$label = (string) ( $r[ $l ] ?? '' );
 			$val   = NTC_Formulas::numeric( $r[ $v ] ?? 0 );
 			$pct   = max( 0, min( 100, ( $val / $max ) * 100 ) );
 			$hl    = $this->is_highlight( $label, $c );
 			$aria  = $label . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() );
-			$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span></div>';
+			$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span>' . $ref . '</div>';
 			if ( $c['showValues'] ) {
 				$out .= '<div class="ntc-hbar-value">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</div>';
 			}$out .= '</div>';}
@@ -1353,6 +1383,7 @@ final class NTC_Renderer {
 		}$out = '<div class="ntc-dual" style="--ntc-chart-breakpoint:' . absint( $c['mobileBreakpoint'] ) . 'px">';
 		foreach ( $vals as $v ) {
 			$max  = $this->nice_max( $this->max_for( $rows, $v ) );
+			$ref  = $this->ref_lines( $max, $c );
 			$out .= '<section class="ntc-dual-panel"><h4>' . esc_html( $columns[ $v ]['label'] ?? ( 'Metric ' . ( $v + 1 ) ) ) . '</h4><div class="ntc-hbars">';
 			foreach ( $rows as $r ) {
 				$label = (string) ( $r[ $l ] ?? '' );
@@ -1360,7 +1391,7 @@ final class NTC_Renderer {
 				$pct   = max( 0, min( 100, ( $val / $max ) * 100 ) );
 				$hl    = $this->is_highlight( $label, $c );
 				$aria  = $label . ': ' . $this->format_value( $val, $c, $columns[ $v ] ?? array() );
-				$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span></div>';
+				$out  .= '<div class="ntc-hbar-row' . ( $hl ? ' is-highlight' : '' ) . '" tabindex="0" aria-label="' . esc_attr( $aria ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $label, $val, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><div class="ntc-hbar-label">' . esc_html( $label ) . '</div><div class="ntc-hbar-track"><span class="ntc-hbar-fill" style="width:' . esc_attr( $pct ) . '%"></span>' . $ref . '</div>';
 				if ( $c['showValues'] ) {
 					$out .= '<div class="ntc-hbar-value">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</div>';
 				}$out .= '</div>';
@@ -1512,6 +1543,7 @@ final class NTC_Renderer {
 				$out .= '<text x="' . round( $px( $tk ), 1 ) . '" y="' . ( $h - $pad_b + 18 ) . '" class="ntc-svg-label" text-anchor="middle">' . esc_html( $this->tick_label( (int) $tk, $xmax - $xmin ) ) . '</text>';
 			}
 		}
+		$out .= $this->svg_ref_lines( $min, $max, $pad_l, $pad_r, $pad_t, $ph, $c );
 		return $out . '</svg>';
 	}
 

@@ -105,6 +105,35 @@ $assert( false !== strpos( $call( 'tip_text', 'GPU', '100', array( 'unit' => 'fp
 $ticks = $call( 'time_ticks', 0.0, 100.0 );
 $assert( 5 === count( $ticks ) && array( 0.0, 25.0, 50.0, 75.0, 100.0 ) === array_map( 'floatval', $ticks ), 'time_ticks returns 5 evenly spaced values' );
 $assert( 'Jan 15' === $call( 'tick_label', gmmktime( 0, 0, 0, 1, 15, 2026 ), 20 * DAY_IN_SECONDS ), 'tick_label formats month-day for 20-day span' );
+$ref = $call(
+	'ref_lines',
+	100.0,
+	array(
+		'referenceLines' => array(
+			array(
+				'value' => 50,
+				'label' => 'Avg',
+				'color' => '#f00',
+			),
+		),
+	)
+);
+$assert( false !== strpos( $ref, 'left:50%' ) && false !== strpos( $ref, '>Avg<' ), 'ref_lines positions span at 50% with label' );
+$assert(
+	'' === $call(
+		'ref_lines',
+		100.0,
+		array(
+			'referenceLines' => array(
+				array(
+					'value' => 150,
+					'label' => 'X',
+				),
+			),
+		)
+	),
+	'ref_lines skips value above max'
+);
 $heat_cfg = array(
 	'autoColorRules' => array(
 		array(
