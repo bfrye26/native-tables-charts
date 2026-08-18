@@ -12,13 +12,14 @@ final class NTC_Sync {
 	public static function fetch( string $url ): string {
 		if ( ! preg_match( '#^https?://#i', $url ) ) {
 			throw new Exception( 'Invalid source URL.' ); }
-		$response = wp_remote_get(
+		$response = wp_safe_remote_get(
 			$url,
 			array(
-				'timeout'     => 15,
-				'redirection' => 3,
-				'sslverify'   => true,
-				'user-agent'  => 'NativeTablesAndCharts/' . NTC_VERSION,
+				'timeout'             => 15,
+				'redirection'         => 3,
+				'sslverify'           => true,
+				'limit_response_size' => self::MAX_BYTES + 1,
+				'user-agent'          => 'NativeTablesAndCharts/' . NTC_VERSION,
 			)
 		);
 		if ( is_wp_error( $response ) ) {

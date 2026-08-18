@@ -5,8 +5,8 @@ const {useState,useEffect,useRef,useMemo}=wp.element;
 const {registerBlockType,registerBlockVariation,createBlock}=wp.blocks;
 const {InspectorControls,BlockControls,MediaUpload,MediaUploadCheck,useBlockProps}=wp.blockEditor;
 const C=wp.components;
-const {PanelBody,SelectControl,TextControl,TextareaControl,ToggleControl,RangeControl,Button,ToolbarGroup,ToolbarButton,DropdownMenu,Dropdown,Modal,Notice,ColorPalette,CheckboxControl,Spinner}=C;
-const {__}=wp.i18n;
+const {PanelBody,SelectControl,TextControl,TextareaControl,ToggleControl,RangeControl,Button,ToolbarGroup,DropdownMenu,Dropdown,Modal,Notice,ColorPalette,CheckboxControl,Spinner}=C;
+const {__,sprintf}=wp.i18n;
 const apiFetch=wp.apiFetch;
 const SSR=wp.serverSideRender && (wp.serverSideRender.default||wp.serverSideRender);
 const CFG=window.NTC_EDITOR||{};
@@ -20,22 +20,86 @@ const tableAttributes={widthMode:{type:'string'},align:{type:'string',default:''
 const chartAttributes={widthMode:{type:'string'},align:{type:'string',default:''},mode:{type:'string',default:'inline'},datasetId:{type:'number',default:0},viewId:{type:'number',default:0},columns:{type:'array',default:[{id:'c1',label:'Product',type:'text',unit:''},{id:'c2',label:'Score',type:'number',unit:''}]},rows:{type:'array',default:[['Product A','100'],['Product B','85'],['Product C','72']]},config:{type:'object',default:{chartType:'horizontal-bar',title:'Benchmark',subtitle:'',labelColumn:0,valueColumns:[1],sortColumn:1,sortDirection:'desc',preset:'benchmark-dark',typographyPreset:'comfortable',density:'auto',accessibleDataMode:'screenreader',allowMultipleHighlights:false}},cellMeta:{type:'object',default:{}}};
 const colOptions=cols=>cols.map((c,i)=>({label:(i+1)+'. '+(c.label||('Column '+(i+1))),value:String(i)}));
 const chartTypes=[
- {label:__('Horizontal Bar','native-tables-charts'),value:'horizontal-bar'},
- {label:__('Dual-Metric Benchmark','native-tables-charts'),value:'dual-metric'},
- {label:__('Vertical Bar','native-tables-charts'),value:'vertical-bar'},
- {label:__('Grouped Bar','native-tables-charts'),value:'grouped-bar'},
- {label:__('Stacked Bar','native-tables-charts'),value:'stacked-bar'},
- {label:__('Line','native-tables-charts'),value:'line'},
- {label:__('Area','native-tables-charts'),value:'area'},
- {label:__('Scatter','native-tables-charts'),value:'scatter'},
- {label:__('Donut','native-tables-charts'),value:'donut'},
- {label:__('Radar','native-tables-charts'),value:'radar'},
- {label:__('Gauge','native-tables-charts'),value:'gauge'},
- {label:__('Change','native-tables-charts'),value:'change'},
- {label:__('Dumbbell','native-tables-charts'),value:'dumbbell'},
- {label:__('Small Multiples','native-tables-charts'),value:'small-multiples'},
- {label:__('Heatmap','native-tables-charts'),value:'heatmap'}
+ {label:__('Horizontal bar','native-tables-charts'),value:'horizontal-bar',group:'compare',icon:'chart-bar',description:__('Rank categories clearly.','native-tables-charts'),minMetrics:1},
+ {label:__('Vertical bar','native-tables-charts'),value:'vertical-bar',group:'compare',icon:'chart-bar',description:__('Compare a short category list.','native-tables-charts'),minMetrics:1},
+ {label:__('Grouped bar','native-tables-charts'),value:'grouped-bar',group:'compare',icon:'chart-bar',description:__('Compare multiple metrics side by side.','native-tables-charts'),minMetrics:2},
+ {label:__('Stacked bar','native-tables-charts'),value:'stacked-bar',group:'compare',icon:'chart-bar',description:__('Show totals and their composition.','native-tables-charts'),minMetrics:2},
+ {label:__('Dual-metric benchmark','native-tables-charts'),value:'dual-metric',group:'compare',icon:'performance',description:__('Pair two benchmark values per row.','native-tables-charts'),minMetrics:2},
+ {label:__('Change','native-tables-charts'),value:'change',group:'compare',icon:'update',description:__('Emphasize gain or loss.','native-tables-charts'),minMetrics:2},
+ {label:__('Dumbbell','native-tables-charts'),value:'dumbbell',group:'compare',icon:'leftright',description:__('Show the gap between two values.','native-tables-charts'),minMetrics:2},
+	{label:__('Bullet','native-tables-charts'),value:'bullet',group:'compare',icon:'minus',description:__('Compare actual values with targets.','native-tables-charts'),minMetrics:2},
+	{label:__('Population pyramid','native-tables-charts'),value:'population-pyramid',group:'compare',icon:'align-pull-left',description:__('Compare two opposing distributions.','native-tables-charts'),minMetrics:2},
+	{label:__('Slope chart','native-tables-charts'),value:'slope',group:'compare',icon:'chart-line',description:__('Emphasize movement between two periods.','native-tables-charts'),minMetrics:2},
+ {label:__('Line','native-tables-charts'),value:'line',group:'trend',icon:'chart-line',description:__('Track change across an ordered axis.','native-tables-charts'),minMetrics:1},
+ {label:__('Area','native-tables-charts'),value:'area',group:'trend',icon:'chart-area',description:__('Show trend with visual magnitude.','native-tables-charts'),minMetrics:1},
+ {label:__('Small multiples','native-tables-charts'),value:'small-multiples',group:'trend',icon:'grid-view',description:__('Compare many compact trends.','native-tables-charts'),minMetrics:1},
+	{label:__('Combo bar + line','native-tables-charts'),value:'combo',group:'trend',icon:'chart-line',description:__('Compare volume with a second trend.','native-tables-charts'),minMetrics:2},
+	{label:__('Waterfall','native-tables-charts'),value:'waterfall',group:'trend',icon:'sort',description:__('Explain gains and losses to a total.','native-tables-charts'),minMetrics:1},
+	{label:__('Range bar','native-tables-charts'),value:'range-bar',group:'trend',icon:'leftright',description:__('Show numeric starts, ends and spans.','native-tables-charts'),minMetrics:2},
+	{label:__('Timeline / Gantt','native-tables-charts'),value:'timeline',group:'trend',icon:'calendar-alt',description:__('Plot tasks or events between dates.','native-tables-charts'),minMetrics:2},
+	{label:__('Candlestick / OHLC','native-tables-charts'),value:'candlestick',group:'trend',icon:'chart-line',description:__('Show open, high, low and close.','native-tables-charts'),minMetrics:4},
+	{label:__('Error bars','native-tables-charts'),value:'error-bar',group:'trend',icon:'editor-contract',description:__('Show values with uncertainty bounds.','native-tables-charts'),minMetrics:3},
+	{label:__('Calendar heatmap','native-tables-charts'),value:'calendar-heatmap',group:'trend',icon:'calendar',description:__('Scan daily activity intensity.','native-tables-charts'),minMetrics:1},
+	{label:__('Pareto','native-tables-charts'),value:'pareto',group:'trend',icon:'chart-bar',description:__('Rank causes with cumulative impact.','native-tables-charts'),minMetrics:1},
+	{label:__('Streamgraph','native-tables-charts'),value:'streamgraph',group:'trend',icon:'chart-area',description:__('Show changing composition over time.','native-tables-charts'),minMetrics:2},
+	{label:__('Histogram','native-tables-charts'),value:'histogram',group:'distribution',icon:'chart-bar',description:__('Show the distribution of one metric.','native-tables-charts'),minMetrics:1},
+	{label:__('Box-and-whisker','native-tables-charts'),value:'boxplot',group:'distribution',icon:'editor-contract',description:__('Compare medians, quartiles and range.','native-tables-charts'),minMetrics:5},
+	{label:__('Likert','native-tables-charts'),value:'likert',group:'distribution',icon:'feedback',description:__('Compare survey response distributions.','native-tables-charts'),minMetrics:3},
+ {label:__('Scatter','native-tables-charts'),value:'scatter',group:'relationship',icon:'chart-line',description:__('Reveal correlation and outliers.','native-tables-charts'),minMetrics:1},
+	{label:__('Bubble','native-tables-charts'),value:'bubble',group:'relationship',icon:'marker',description:__('Encode X, Y and magnitude together.','native-tables-charts'),minMetrics:3},
+ {label:__('Radar','native-tables-charts'),value:'radar',group:'relationship',icon:'admin-site-alt3',description:__('Compare profiles across dimensions.','native-tables-charts'),minMetrics:1},
+ {label:__('Heatmap','native-tables-charts'),value:'heatmap',group:'relationship',icon:'screenoptions',description:__('Scan patterns across a matrix.','native-tables-charts'),minMetrics:1},
+	{label:__('Parallel coordinates','native-tables-charts'),value:'parallel-coordinates',group:'relationship',icon:'editor-justify',description:__('Compare records across many metrics.','native-tables-charts'),minMetrics:3},
+	{label:__('Network graph','native-tables-charts'),value:'network',group:'relationship',icon:'networking',description:__('Show links between named entities.','native-tables-charts'),minMetrics:1,needsX:true},
+ {label:__('Donut','native-tables-charts'),value:'donut',group:'part',icon:'chart-pie',description:__('Show parts of one whole.','native-tables-charts'),minMetrics:1},
+	{label:__('Polar area','native-tables-charts'),value:'polar-area',group:'part',icon:'chart-pie',description:__('Compare radial values on a common scale.','native-tables-charts'),minMetrics:1},
+	{label:__('Gauge','native-tables-charts'),value:'gauge',group:'part',icon:'dashboard',description:__('Show one value against a range.','native-tables-charts'),minMetrics:1},
+	{label:__('Funnel','native-tables-charts'),value:'funnel',group:'part',icon:'filter',description:__('Show conversion stages and drop-off.','native-tables-charts'),minMetrics:1},
+	{label:__('Treemap','native-tables-charts'),value:'treemap',group:'hierarchy',icon:'screenoptions',description:__('Show hierarchical parts by area.','native-tables-charts'),minMetrics:1},
+	{label:__('Sunburst','native-tables-charts'),value:'sunburst',group:'hierarchy',icon:'chart-pie',description:__('Show hierarchy in concentric rings.','native-tables-charts'),minMetrics:1},
+	{label:__('Sankey','native-tables-charts'),value:'sankey',group:'hierarchy',icon:'randomize',description:__('Show weighted flow from source to target.','native-tables-charts'),minMetrics:1,needsX:true},
+	{label:__('Choropleth / region map','native-tables-charts'),value:'choropleth',group:'hierarchy',icon:'location-alt',description:__('Compare values across named regions.','native-tables-charts'),minMetrics:1}
 ];
+const chartTypeGroups=[
+ {value:'compare',label:__('Compare','native-tables-charts')},
+ {value:'trend',label:__('Trends over time','native-tables-charts')},
+	{value:'distribution',label:__('Distributions and uncertainty','native-tables-charts')},
+ {value:'relationship',label:__('Relationships and patterns','native-tables-charts')},
+	{value:'part',label:__('Part to whole and progress','native-tables-charts')},
+	{value:'hierarchy',label:__('Hierarchy, flow and geography','native-tables-charts')}
+];
+const chartTypeInfo=value=>chartTypes.find(type=>type.value===value)||chartTypes[0];
+const chartMappingHelp=value=>({
+	combo:__('Select the bar metric first and the line metric second.','native-tables-charts'),
+	boxplot:__('Select metrics in this order: minimum, Q1, median, Q3, maximum.','native-tables-charts'),
+	bullet:__('Select actual first, target second, and an optional maximum third.','native-tables-charts'),
+	bubble:__('Select X first, Y second, and bubble size third.','native-tables-charts'),
+	'range-bar':__('Select the numeric start and end metrics.','native-tables-charts'),
+	timeline:__('Select the start-date and end-date columns.','native-tables-charts'),
+	candlestick:__('Select open, high, low and close in that order.','native-tables-charts'),
+	'error-bar':__('Select value, lower bound and upper bound in that order.','native-tables-charts'),
+	'population-pyramid':__('Select the left-side population first and right-side population second.','native-tables-charts'),
+	likert:__('Select response columns from the most negative response to the most positive.','native-tables-charts'),
+	sankey:__('Use Category labels for the source, X column for the target, and the first metric for weight.','native-tables-charts'),
+	network:__('Use Category labels for the source and X column for the target. The first metric can represent link weight.','native-tables-charts'),
+	treemap:__('Use slash-separated labels such as Hardware/Laptops to express hierarchy.','native-tables-charts'),
+	sunburst:__('Use slash-separated labels such as Hardware/Laptops to create hierarchy levels.','native-tables-charts'),
+	choropleth:__('Use region names or codes as labels and select the value to shade by.','native-tables-charts'),
+	'parallel-coordinates':__('Select three or more metrics to create the parallel axes.','native-tables-charts')
+}[value]||__('Select metrics in the order they should be encoded by the chart.','native-tables-charts'));
+const isNumericCell=value=>{const clean=String(value??'').replace(/[^0-9.\-]+/g,'');return clean!==''&&clean!=='-'&&Number.isFinite(Number(clean));};
+function chartSetupIssues(columns,rows,config){
+ const issues=[];const values=(config.valueColumns||[]).map(Number).filter(i=>i>=0&&i<columns.length);const labelColumn=Number(config.labelColumn||0);const type=chartTypeInfo(config.chartType||'horizontal-bar');
+ const populated=(rows||[]).filter(row=>(row||[]).some(cell=>String(cell??'').trim()!==''));
+ if(columns.length<2)issues.push({status:'error',message:__('Add at least one label column and one metric column.','native-tables-charts')});
+ if(!populated.length)issues.push({status:'error',message:__('Add data to see a chart preview.','native-tables-charts')});
+ if(labelColumn<0||labelColumn>=columns.length)issues.push({status:'error',message:__('Choose a valid label column.','native-tables-charts')});
+ if(!values.length)issues.push({status:'error',message:__('Choose at least one metric in Data & mapping.','native-tables-charts')});
+  if(values.length&&values.length<Number(type.minMetrics||1))issues.push({status:'warning',message:sprintf(__('%1$s works best with at least %2$d metrics.','native-tables-charts'),type.label,type.minMetrics)});
+	if(type.needsX&&config.xColumn===null)issues.push({status:'warning',message:__('Choose a target column under Advanced analysis.','native-tables-charts')});
+	if(type.value!=='timeline'&&values.length&&populated.length&&!values.some(i=>populated.some(row=>isNumericCell(row[i]))))issues.push({status:'error',message:__('The selected metrics need at least one numeric value.','native-tables-charts')});
+ return issues;
+}
 const colTypes=['auto','text','number','currency','percent','url','time','iso_date','us_long_date','short_date','sparkline','delta'].map(v=>({label:v.replace(/_/g,' '),value:v}));
 
 
@@ -68,6 +132,49 @@ function PresetBrowser({type,presets,customPresets,value,onApply,label}){
  return h('div',{className:'ntc-preset-browser'},
    h('div',{className:'ntc-preset-current'},h(PresetPreview,{type,settings:current.settings,compact:true}),h('div',null,h('strong',null,current.label),h('span',null,current.custom?__('Custom style','native-tables-charts'):__('Built-in style','native-tables-charts')))),
    h(Dropdown,{className:'ntc-preset-dropdown',contentClassName:'ntc-preset-popover',renderToggle:({isOpen,onToggle})=>h(Button,{variant:'secondary',onClick:onToggle,'aria-expanded':isOpen},label||(type==='chart'?__('Browse chart themes','native-tables-charts'):__('Browse table styles','native-tables-charts'))),renderContent:({onClose})=>h('div',{className:'ntc-preset-grid'},entries.map(item=>h('button',{type:'button',key:item.value,className:'ntc-preset-card'+(item.value===value?' is-selected':''),onClick:()=>{onApply(item.value);onClose();}},h(PresetPreview,{type,settings:item.settings}),h('span',{className:'ntc-preset-card-name'},item.label),item.custom&&h('small',null,__('Custom','native-tables-charts')))))})
+ );
+}
+function ChartTypeBrowser({value,onChange}){
+ const current=chartTypeInfo(value);
+ return h('div',{className:'ntc-chart-type-browser'},
+   h('span',{className:'ntc-control-label'},__('Chart type','native-tables-charts')),
+   h(Dropdown,{contentClassName:'ntc-chart-type-popover',renderToggle:({isOpen,onToggle})=>h(Button,{variant:'secondary',className:'ntc-chart-type-trigger',onClick:onToggle,'aria-expanded':isOpen},
+     h('span',{className:'dashicons dashicons-'+current.icon,'aria-hidden':'true'}),
+     h('span',{className:'ntc-chart-type-trigger-copy'},h('strong',null,current.label),h('small',null,current.description)),
+     h('span',{className:'dashicons dashicons-arrow-down-alt2','aria-hidden':'true'})
+   ),renderContent:({onClose})=>h('div',{className:'ntc-chart-type-menu'},
+     h('div',{className:'ntc-chart-type-menu-head'},h('strong',null,__('Choose a chart type','native-tables-charts')),h('span',null,__('Start with the question your data needs to answer.','native-tables-charts'))),
+     chartTypeGroups.map(group=>h('section',{className:'ntc-chart-type-group',key:group.value},
+       h('h3',null,group.label),
+       h('div',{className:'ntc-chart-type-grid'},chartTypes.filter(type=>type.group===group.value).map(type=>h('button',{type:'button',key:type.value,className:'ntc-chart-type-option'+(type.value===value?' is-selected':''),'aria-pressed':type.value===value?'true':'false',onClick:()=>{onChange(type.value);onClose();}},
+         h('span',{className:'dashicons dashicons-'+type.icon,'aria-hidden':'true'}),
+         h('span',null,h('strong',null,type.label),h('small',null,type.description))
+       )))
+     ))
+   )})
+ );
+}
+function ChartWorkspaceHeader({config,rowCount,metricCount,dataKind,editorMode,onModeChange,previewMode,onPreviewModeChange,onEditStyle,issues}){
+ const type=chartTypeInfo(config.chartType||'horizontal-bar');const hasIssues=issues.length>0;
+ const modeButton=(value,label,icon)=>h(Button,{variant:editorMode===value?'primary':'tertiary',icon,'aria-pressed':editorMode===value?'true':'false',onClick:()=>onModeChange(value)},label);
+ const deviceButton=(value,label)=>h('button',{type:'button',className:'ntc-device-button'+(previewMode===value?' is-selected':''),'aria-pressed':previewMode===value?'true':'false',onClick:()=>onPreviewModeChange(value)},label);
+ return h(wp.element.Fragment,null,
+   h('div',{className:'ntc-chart-workspace-header'},
+      h('div',{className:'ntc-chart-workspace-heading'},h('strong',null,__('Native Data Chart','native-tables-charts')+(config.title?' — '+config.title:'')),h('span',null,type.label+' · '+rowCount+' '+(rowCount===1?__('row','native-tables-charts'):__('rows','native-tables-charts'))+' · '+metricCount+' '+(metricCount===1?__('metric','native-tables-charts'):__('metrics','native-tables-charts'))+' · '+dataKind)),
+     h('div',{className:'ntc-chart-mode-switch','aria-label':__('Chart workspace view','native-tables-charts')},modeButton('preview',__('Preview','native-tables-charts'),'visibility'),modeButton('data',__('Data','native-tables-charts'),'editor-table'),modeButton('split',__('Split','native-tables-charts'),'columns')),
+     h('div',{className:'ntc-chart-workspace-actions'},editorMode!=='data'&&h('div',{className:'ntc-device-switch','aria-label':__('Preview size','native-tables-charts')},deviceButton('desktop',__('Desktop','native-tables-charts')),deviceButton('tablet',__('Tablet','native-tables-charts')),deviceButton('mobile',__('Mobile','native-tables-charts'))),h(Button,{variant:'secondary',icon:'art',onClick:onEditStyle},__('Style','native-tables-charts'))),
+     h('span',{className:'ntc-chart-health '+(hasIssues?'has-issues':'is-ready')},h('span',{className:'dashicons dashicons-'+(hasIssues?'warning':'yes-alt'),'aria-hidden':'true'}),hasIssues?__('Needs attention','native-tables-charts'):__('Ready','native-tables-charts'))
+   ),
+   hasIssues&&h('div',{className:'ntc-chart-setup-notice',role:'status'},h('span',{className:'dashicons dashicons-warning','aria-hidden':'true'}),h('div',null,h('strong',null,__('Finish chart setup','native-tables-charts')),issues.map((issue,index)=>h('span',{key:index},issue.message))))
+  );
+}
+function TableWorkspaceHeader({rowCount,columnCount,dataKind,editorMode,onModeChange,previewMode,onPreviewModeChange,onEditStyle}){
+ const modeButton=(value,label,icon)=>h(Button,{variant:editorMode===value?'primary':'tertiary',icon,'aria-pressed':editorMode===value?'true':'false',onClick:()=>onModeChange(value)},label);
+ const deviceButton=(value,label)=>h('button',{type:'button',className:'ntc-device-button'+(previewMode===value?' is-selected':''),'aria-pressed':previewMode===value?'true':'false',onClick:()=>onPreviewModeChange(value)},label);
+ return h('div',{className:'ntc-chart-workspace-header ntc-table-workspace-header'},
+  h('div',{className:'ntc-chart-workspace-heading'},h('strong',null,__('Native Data Table','native-tables-charts')),h('span',null,rowCount+' '+(rowCount===1?__('row','native-tables-charts'):__('rows','native-tables-charts'))+' · '+columnCount+' '+(columnCount===1?__('column','native-tables-charts'):__('columns','native-tables-charts'))+' · '+dataKind)),
+  h('div',{className:'ntc-chart-mode-switch','aria-label':__('Table workspace view','native-tables-charts')},modeButton('data',__('Data','native-tables-charts'),'editor-table'),modeButton('preview',__('Preview','native-tables-charts'),'visibility')),
+  h('div',{className:'ntc-chart-workspace-actions'},editorMode==='preview'&&h('div',{className:'ntc-device-switch','aria-label':__('Preview size','native-tables-charts')},deviceButton('desktop',__('Desktop','native-tables-charts')),deviceButton('tablet',__('Tablet','native-tables-charts')),deviceButton('mobile',__('Mobile','native-tables-charts'))),h(Button,{variant:'secondary',icon:'art',onClick:onEditStyle},__('Style','native-tables-charts')))
  );
 }
 function ChartTypographyControls({config,onPatch}){
@@ -119,7 +226,14 @@ function StyleControls({type,attributes,setAttributes,customPresets}){
    h(CompactColorControl,{label:__('Highlight colour','native-tables-charts'),value:config.highlightColor||'',placeholder:'#9e2f5f',onChange:v=>setConfig({highlightColor:v})}),
    h(CompactColorControl,{label:__('Text colour','native-tables-charts'),value:config.textColor||'',placeholder:'#f5f7fa',onChange:v=>setConfig({textColor:v})}),
    h(CompactColorControl,{label:__('Muted text','native-tables-charts'),value:config.mutedColor||'',placeholder:'#9ba8b8',onChange:v=>setConfig({mutedColor:v})}),
-   h(CompactColorControl,{label:__('Grid colour','native-tables-charts'),value:config.gridColor||'',placeholder:'#263445',onChange:v=>setConfig({gridColor:v})})
+   h(CompactColorControl,{label:__('Grid colour','native-tables-charts'),value:config.gridColor||'',placeholder:'#263445',onChange:v=>setConfig({gridColor:v})}),
+   h(SelectControl,{label:__('Colour mode','native-tables-charts'),value:config.themeMode||'fixed',options:[{label:__('Use this theme','native-tables-charts'),value:'fixed'},{label:__('Adapt to visitor colour scheme','native-tables-charts'),value:'auto'}],onChange:v=>setConfig({themeMode:v})}),
+   config.themeMode==='auto'&&h(wp.element.Fragment,null,
+     h(CompactColorControl,{label:__('Dark background','native-tables-charts'),value:config.darkBackground||'',placeholder:'#0f131a',onChange:v=>setConfig({darkBackground:v})}),
+     h(CompactColorControl,{label:__('Dark text','native-tables-charts'),value:config.darkTextColor||'',placeholder:'#e6e9ee',onChange:v=>setConfig({darkTextColor:v})}),
+     h(CompactColorControl,{label:__('Dark muted text','native-tables-charts'),value:config.darkMutedColor||'',placeholder:'#9aa5b1',onChange:v=>setConfig({darkMutedColor:v})}),
+     h(CompactColorControl,{label:__('Dark grid','native-tables-charts'),value:config.darkGridColor||'',placeholder:'#2a3442',onChange:v=>setConfig({darkGridColor:v})})
+   )
  );
  return h(wp.element.Fragment,null,
    h(PresetBrowser,{type:'table',presets,customPresets,value:config.preset||'editorial',onApply:applyPreset,label:__('Browse table styles','native-tables-charts')}),
@@ -130,10 +244,13 @@ function StyleControls({type,attributes,setAttributes,customPresets}){
    h(CompactColorControl,{label:__('Body text','native-tables-charts'),value:config.bodyColor||'',placeholder:'#252a34',onChange:v=>setConfig({bodyColor:v})}),
    h(CompactColorControl,{label:__('Link colour','native-tables-charts'),value:config.linkColor||'',placeholder:'#b51f56',onChange:v=>setConfig({linkColor:v})}),
    h(CompactColorControl,{label:__('Accent colour','native-tables-charts'),value:config.accentColor||'',placeholder:'#9e2f5f',onChange:v=>setConfig({accentColor:v})}),
-   h(CompactColorControl,{label:__('Border colour','native-tables-charts'),value:config.borderColor||'',placeholder:'#dfe3e8',onChange:v=>setConfig({borderColor:v})}),
+    h(CompactColorControl,{label:__('Border colour','native-tables-charts'),value:config.borderColor||'',placeholder:'#dfe3e8',onChange:v=>setConfig({borderColor:v})}),
+	 h(CompactColorControl,{label:__('Outer frame colour','native-tables-charts'),value:config.frameColor||'',placeholder:config.borderColor||'#dfe3e8',onChange:v=>setConfig({frameColor:v})}),
    h(RangeControl,{label:__('Header font size','native-tables-charts'),value:Number(config.headerFontSize||13),min:9,max:30,onChange:v=>setConfig({headerFontSize:v})}),
    h(RangeControl,{label:__('Body font size','native-tables-charts'),value:Number(config.fontSize||14),min:9,max:30,onChange:v=>setConfig({fontSize:v})}),
-   h(RangeControl,{label:__('Border radius','native-tables-charts'),value:Number(config.borderRadius||0),min:0,max:30,onChange:v=>setConfig({borderRadius:v})})
+	 h(RangeControl,{label:__('Cell border radius','native-tables-charts'),value:Number(config.borderRadius||0),min:0,max:30,onChange:v=>setConfig({borderRadius:v})}),
+	 h(RangeControl,{label:__('Outer frame width','native-tables-charts'),value:Number(config.frameWidth||0),min:0,max:12,onChange:v=>setConfig({frameWidth:v})}),
+	 h(RangeControl,{label:__('Outer frame radius','native-tables-charts'),value:Number(config.frameRadius||0),min:0,max:60,onChange:v=>setConfig({frameRadius:v})})
  );
 }
 function StyleInspector(props){return h(InspectorControls,{group:'styles'},h(PanelBody,{title:props.type==='chart'?__('Chart appearance','native-tables-charts'):__('Table appearance','native-tables-charts'),initialOpen:true},h(StyleControls,props)));}
@@ -417,6 +534,7 @@ function TableInspector({attributes,setAttributes,selected,customPresets}){
     h(SelectControl,{label:__('Caption font weight','native-tables-charts'),value:String(config.captionFontWeight||'400'),options:['100','200','300','400','500','600','700','800','900'].map(v=>({label:v,value:v})),onChange:v=>setConfig(Object.assign({},config,{captionFontWeight:v}))}),
     h(SelectControl,{label:__('Caption font style','native-tables-charts'),value:config.captionFontStyle||'normal',options:[{label:__('Normal','native-tables-charts'),value:'normal'},{label:__('Italic','native-tables-charts'),value:'italic'},{label:__('Oblique','native-tables-charts'),value:'oblique'}],onChange:v=>setConfig(Object.assign({},config,{captionFontStyle:v}))}),
     h(TextControl,{label:__('Border colour','native-tables-charts'),value:config.borderColor||'',onChange:v=>setConfig(Object.assign({},config,{borderColor:v}))}),
+	 h(TextControl,{label:__('Outer frame colour','native-tables-charts'),value:config.frameColor||'',help:__('Used only when outer frame width is greater than zero.','native-tables-charts'),onChange:v=>setConfig(Object.assign({},config,{frameColor:v}))}),
     h(TextControl,{label:__('Highlight/accent','native-tables-charts'),value:config.accentColor||'',onChange:v=>setConfig(Object.assign({},config,{accentColor:v}))}),
     h(TextControl,{label:__('Cell padding','native-tables-charts'),value:config.cellPadding||'10px 12px',onChange:v=>setConfig(Object.assign({},config,{cellPadding:v}))}),
     h(RangeControl,{label:__('Header font size','native-tables-charts'),value:Number(config.headerFontSize||13),min:9,max:30,onChange:v=>setConfig(Object.assign({},config,{headerFontSize:v}))}),
@@ -424,6 +542,8 @@ function TableInspector({attributes,setAttributes,selected,customPresets}){
     h(RangeControl,{label:__('Caption font size','native-tables-charts'),value:Number(config.captionFontSize||13),min:9,max:30,onChange:v=>setConfig(Object.assign({},config,{captionFontSize:v}))}),
     h(RangeControl,{label:__('Border width','native-tables-charts'),value:Number(config.borderWidth||1),min:0,max:8,onChange:v=>setConfig(Object.assign({},config,{borderWidth:v}))}),
     h(RangeControl,{label:__('Border radius','native-tables-charts'),value:Number(config.borderRadius||0),min:0,max:30,onChange:v=>setConfig(Object.assign({},config,{borderRadius:v}))}),
+	 h(RangeControl,{label:__('Outer frame width','native-tables-charts'),value:Number(config.frameWidth||0),min:0,max:12,onChange:v=>setConfig(Object.assign({},config,{frameWidth:v}))}),
+	 h(RangeControl,{label:__('Outer frame radius','native-tables-charts'),value:Number(config.frameRadius||0),min:0,max:60,onChange:v=>setConfig(Object.assign({},config,{frameRadius:v}))}),
     h(RangeControl,{label:__('Top margin','native-tables-charts'),value:Number(config.marginTop||0),min:0,max:100,onChange:v=>setConfig(Object.assign({},config,{marginTop:v}))}),
     h(RangeControl,{label:__('Bottom margin','native-tables-charts'),value:Number(config.marginBottom||0),min:0,max:100,onChange:v=>setConfig(Object.assign({},config,{marginBottom:v}))})
   ),
@@ -441,8 +561,7 @@ function TableInspector({attributes,setAttributes,selected,customPresets}){
 function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFocusData}){
  const columns=attributes.columns||[];const rawConfig=attributes.config||{};const presets=CFG.chartPresets||{};const presetValue=rawConfig.preset||'benchmark-dark';let presetSettings={};
  if(String(presetValue).startsWith('custom:')){const p=(customPresets||[]).find(x=>String(x.id)===String(presetValue).split(':')[1]);presetSettings=(p&&p.settings)||{};}else presetSettings=presets[presetValue]||{};
- const baseConfig=Object.assign({},CFG.chartDefaults||{},presetSettings,rawConfig);const typographySettings=baseConfig.typographyPreset!=='custom'?((CFG.chartTypographyPresets||{})[baseConfig.typographyPreset]||{}):{};const densitySettings=(baseConfig.density&&baseConfig.density!=='auto'&&baseConfig.density!=='custom')?((CFG.chartDensityPresets||{})[baseConfig.density]||{}):{};const config=Object.assign({},baseConfig,typographySettings,densitySettings,rawConfig);const setConfig=n=>setAttributes({config:n});
- const applyPreset=v=>{if(v.startsWith('custom:')){const p=(customPresets||[]).find(x=>String(x.id)===v.split(':')[1]);if(p)setConfig(Object.assign({},rawConfig,p.settings||{},{preset:v}));}else setConfig(Object.assign({},rawConfig,presets[v]||{},{preset:v}));};
+ const baseConfig=Object.assign({},CFG.chartDefaults||{},presetSettings,rawConfig);const typographySettings=baseConfig.typographyPreset!=='custom'?((CFG.chartTypographyPresets||{})[baseConfig.typographyPreset]||{}):{};const densitySettings=(baseConfig.density&&baseConfig.density!=='auto'&&baseConfig.density!=='custom')?((CFG.chartDensityPresets||{})[baseConfig.density]||{}):{};const config=Object.assign({},baseConfig,typographySettings,densitySettings,rawConfig);
  const patch=next=>setAttributes({config:Object.assign({},rawConfig,next)});
  const values=(config.valueColumns||[]).map(Number);
  const labelColumn=Number(config.labelColumn||0);
@@ -451,10 +570,10 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
  const focusValue=focusValues[0]||'';
  const setPrimaryFocus=v=>patch({highlightValues:v?[v]:[]});
  const dataMode=config.accessibleDataMode||'screenreader';
+ const issues=chartSetupIssues(columns,attributes.rows||[],config);
  return h(InspectorControls,null,
-  h(PanelBody,{title:__('Chart','native-tables-charts'),initialOpen:true},
-    h(SelectControl,{label:__('Chart layout','native-tables-charts'),value:config.chartType||'horizontal-bar',options:chartTypes,onChange:v=>patch({chartType:v})}),
-    h(PresetBrowser,{type:'chart',presets,customPresets,value:config.preset||'benchmark-dark',onApply:applyPreset,label:__('Browse chart themes','native-tables-charts')}),
+  h(PanelBody,{title:__('Chart setup','native-tables-charts'),initialOpen:true},
+    h(ChartTypeBrowser,{value:config.chartType||'horizontal-bar',onChange:v=>patch({chartType:v})}),
     h(TextControl,{label:__('Title','native-tables-charts'),value:config.title||'',onChange:v=>patch({title:v})}),
     h(TextControl,{label:__('Subtitle','native-tables-charts'),value:config.subtitle||'',onChange:v=>patch({subtitle:v})}),
     h(SelectControl,{label:__('Performance direction','native-tables-charts'),value:config.direction||'higher',options:[{label:__('Higher is better','native-tables-charts'),value:'higher'},{label:__('Lower is better','native-tables-charts'),value:'lower'},{label:__('Neutral','native-tables-charts'),value:'neutral'}],onChange:v=>patch({direction:v,sortDirection:v==='lower'?'asc':config.sortDirection})})
@@ -464,28 +583,27 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
     h(ToggleControl,{label:__('Legend toggles','native-tables-charts'),checked:!!config.legendToggles,onChange:v=>patch({legendToggles:v})}),
     config.chartType==='line'&&h(ToggleControl,{label:__('Enable brush selection','native-tables-charts'),checked:!!config.enableBrush,onChange:v=>patch({enableBrush:v})})
   ),
-  h(PanelBody,{title:__('Data','native-tables-charts'),initialOpen:true},
+  h(PanelBody,{title:__('Data & mapping','native-tables-charts'),initialOpen:true},
     h('p',{className:'ntc-inspector-note'},(attributes.rows||[]).length+' '+(((attributes.rows||[]).length===1)?__('row','native-tables-charts'):__('rows','native-tables-charts'))+' • '+Math.max(1,values.length)+' '+(Math.max(1,values.length)===1?__('metric','native-tables-charts'):__('metrics','native-tables-charts'))),
-    h('div',{className:'ntc-inline-actions'},onEditData&&h(Button,{variant:'secondary',icon:'editor-table',onClick:onEditData},__('Edit data','native-tables-charts')),onFocusData&&h(Button,{variant:'tertiary',icon:'fullscreen-alt',onClick:onFocusData},__('Focus mode','native-tables-charts')))
+	 h('p',{className:'ntc-inspector-note ntc-mapping-hint'},chartMappingHelp(config.chartType||'horizontal-bar')),
+    issues.length>0&&h(Notice,{status:issues.some(issue=>issue.status==='error')?'error':'warning',isDismissible:false},issues[0].message),
+    h('div',{className:'ntc-inline-actions ntc-inspector-data-actions'},onEditData&&h(Button,{variant:'secondary',icon:'editor-table',onClick:onEditData},__('Edit data','native-tables-charts')),onFocusData&&h(Button,{variant:'tertiary',icon:'fullscreen-alt',onClick:onFocusData},__('Open focus mode','native-tables-charts'))),
+    h(SelectControl,{label:__('Category labels','native-tables-charts'),value:String(config.labelColumn||0),options:colOptions(columns),onChange:v=>patch({labelColumn:Number(v)})}),
+    h('fieldset',{className:'ntc-metric-picker'},h('legend',null,__('Metrics to chart','native-tables-charts')),columns.map((col,i)=>i===Number(config.labelColumn)?null:h(CheckboxControl,{key:i,label:col.label||('Column '+(i+1)),checked:values.includes(i),onChange:checked=>{let next=values.filter(x=>x!==i);if(checked)next.push(i);patch({valueColumns:next,sortColumn:next.length?next[0]:config.sortColumn});}}))),
+    h(SelectControl,{label:__('Sort by','native-tables-charts'),value:String(config.sortColumn??(values[0]||1)),options:colOptions(columns),onChange:v=>patch({sortColumn:Number(v)})}),
+    h(SelectControl,{label:__('Order','native-tables-charts'),value:config.sortDirection||'desc',options:[{label:__('Highest first','native-tables-charts'),value:'desc'},{label:__('Lowest first','native-tables-charts'),value:'asc'},{label:__('Keep data order','native-tables-charts'),value:'none'}],onChange:v=>patch({sortDirection:v})})
   ),
-  h(PanelBody,{title:__('Chart Focus','native-tables-charts'),initialOpen:true},
+  h(PanelBody,{title:__('Chart focus','native-tables-charts'),initialOpen:false},
     h(SelectControl,{label:__('Focused row','native-tables-charts'),value:focusValue,options:[{label:__('No focused row','native-tables-charts'),value:''}].concat(rowLabels),onChange:setPrimaryFocus,help:__('Choose the product or row this chart is about. It will use the chart highlight colour.','native-tables-charts')}),
     focusValue&&h(Button,{variant:'tertiary',isDestructive:true,onClick:()=>setPrimaryFocus('')},__('Clear focus','native-tables-charts')),
     h(ToggleControl,{label:__('Allow multiple focused rows','native-tables-charts'),checked:config.allowMultipleHighlights===true,onChange:v=>patch({allowMultipleHighlights:v,highlightValues:v?focusValues:(focusValue?[focusValue]:[])})}),
     config.allowMultipleHighlights===true&&h('p',{className:'ntc-inspector-note'},__('In Data mode, use the Focus column to add or remove rows from the focus set.','native-tables-charts'))
   ),
-  h(PanelBody,{title:__('Typography & Density','native-tables-charts'),initialOpen:true},
+  h(PanelBody,{title:__('Typography & density','native-tables-charts'),initialOpen:false},
     h(ChartTypographyControls,{config,onPatch:patch}),
     h(ChartDensityControls,{config,onPatch:patch,rowCount:(attributes.rows||[]).length})
   ),
-  h(PanelBody,{title:__('Data Mapping','native-tables-charts'),initialOpen:false},
-    h(SelectControl,{label:__('Label column','native-tables-charts'),value:String(config.labelColumn||0),options:colOptions(columns),onChange:v=>patch({labelColumn:Number(v)})}),
-    h('p',null,__('Value columns','native-tables-charts')),
-    columns.map((col,i)=>i===Number(config.labelColumn)?null:h(CheckboxControl,{key:i,label:col.label||('Column '+(i+1)),checked:values.includes(i),onChange:checked=>{let next=values.filter(x=>x!==i);if(checked)next.push(i);patch({valueColumns:next.length?next:[i],sortColumn:next.length?next[0]:i});}})),
-    h(SelectControl,{label:__('Sort by','native-tables-charts'),value:String(config.sortColumn??(values[0]||1)),options:colOptions(columns),onChange:v=>patch({sortColumn:Number(v)})}),
-    h(SelectControl,{label:__('Sort direction','native-tables-charts'),value:config.sortDirection||'desc',options:[{label:__('Highest first','native-tables-charts'),value:'desc'},{label:__('Lowest first','native-tables-charts'),value:'asc'},{label:__('Keep data order','native-tables-charts'),value:'none'}],onChange:v=>patch({sortDirection:v})})
-  ),
-  h(PanelBody,{title:__('Analysis','native-tables-charts'),initialOpen:false},
+  h(PanelBody,{title:__('Advanced analysis','native-tables-charts'),initialOpen:false},
     h(SelectControl,{label:__('X column','native-tables-charts'),value:String(config.xColumn??''),options:[{label:__('None','native-tables-charts'),value:''}].concat(colOptions(columns)),onChange:v=>patch({xColumn:v===''?null:Number(v)})}),
     h(RangeControl,{label:__('Top N rows','native-tables-charts'),value:Number(config.topN||0),min:0,max:100,step:5,onChange:v=>patch({topN:v})}),
     Number(config.topN||0)>0&&h(TextControl,{label:__('Others label','native-tables-charts'),value:config.othersLabel||'',onChange:v=>patch({othersLabel:v})}),
@@ -493,7 +611,7 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
     h(SeriesRulesEditor,{config,onPatch:patch,columns}),
     h(AnnotationEditor,{config,onPatch:patch})
   ),
-  h(PanelBody,{title:__('Labels & Footer','native-tables-charts'),initialOpen:false},
+  h(PanelBody,{title:__('Labels & footer','native-tables-charts'),initialOpen:false},
     h(TextControl,{label:__('Direction label override','native-tables-charts'),value:config.directionLabel||'',onChange:v=>patch({directionLabel:v})}),
     h(TextControl,{label:__('Legend label','native-tables-charts'),value:config.legendLabel||'',onChange:v=>patch({legendLabel:v})}),
     h(TextControl,{label:__('Axis label','native-tables-charts'),value:config.axisLabel||'',onChange:v=>patch({axisLabel:v})}),
@@ -504,7 +622,7 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
     h(TextareaControl,{label:__('Secondary footer','native-tables-charts'),value:config.secondaryFooter||'',onChange:v=>patch({secondaryFooter:v})}),
     h(TextControl,{label:__('Source','native-tables-charts'),value:config.source||'',onChange:v=>patch({source:v})})
   ),
-  h(PanelBody,{title:__('Accessible Data','native-tables-charts'),initialOpen:false},
+  h(PanelBody,{title:__('Accessible data','native-tables-charts'),initialOpen:false},
     h(SelectControl,{label:__('Chart data on the website','native-tables-charts'),value:dataMode,options:[{label:__('Screen readers only (recommended)','native-tables-charts'),value:'screenreader'},{label:__('Collapsible “View chart data”','native-tables-charts'),value:'collapsible'},{label:__('Always visible table','native-tables-charts'),value:'visible'},{label:__('Disabled','native-tables-charts'),value:'disabled'}],onChange:v=>patch({accessibleDataMode:v}),help:__('Screen readers only keeps the exact data available to assistive technology without adding a visible control below the chart.','native-tables-charts')}),
     dataMode==='disabled'&&h(Notice,{status:'warning',isDismissible:false},__('Disabling the alternate data table reduces accessibility. Use this only when the surrounding article provides the same information in another accessible form.','native-tables-charts'))
   ),
@@ -513,7 +631,7 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
     config.schemaType==='review'&&h(RangeControl,{label:__('Rating minimum','native-tables-charts'),value:Number(config.ratingMin||0),min:0,max:10,onChange:v=>patch({ratingMin:v})}),
     config.schemaType==='review'&&h(RangeControl,{label:__('Rating maximum','native-tables-charts'),value:Number(config.ratingMax||5),min:1,max:100,onChange:v=>patch({ratingMax:v})})
   ),
-  h(PanelBody,{title:__('Responsive & Appearance','native-tables-charts'),initialOpen:false},
+  h(PanelBody,{title:__('Layout & display','native-tables-charts'),initialOpen:false},
     h(SelectControl,{label:__('Aspect ratio','native-tables-charts'),value:config.aspectRatio||'auto',options:[{label:__('Automatic height','native-tables-charts'),value:'auto'},{label:'16:9',value:'16-9'},{label:'4:3',value:'4-3'},{label:__('Square','native-tables-charts'),value:'1-1'}],onChange:v=>patch({aspectRatio:v})}),
     h(RangeControl,{label:__('Mobile panel breakpoint','native-tables-charts'),value:Number(config.mobileBreakpoint||620),min:360,max:1000,onChange:v=>patch({mobileBreakpoint:v})}),
     h(ToggleControl,{label:__('Show numeric axis','native-tables-charts'),checked:config.showAxis!==false,onChange:v=>patch({showAxis:v})}),
@@ -523,34 +641,20 @@ function ChartInspector({attributes,setAttributes,customPresets,onEditData,onFoc
     config.chartType==='gauge'&&h(wp.element.Fragment,null,h(TextControl,{label:__('Gauge minimum','native-tables-charts'),value:String(config.gaugeMin||''),onChange:v=>patch({gaugeMin:v})}),h(TextControl,{label:__('Gauge maximum','native-tables-charts'),value:String(config.gaugeMax||''),onChange:v=>patch({gaugeMax:v})})),
     config.chartType==='small-multiples'&&h(RangeControl,{label:__('Multiples per row','native-tables-charts'),value:Number(config.multiplesPerRow||3),min:1,max:6,onChange:v=>patch({multiplesPerRow:v})}),
     config.chartType==='heatmap'&&h(wp.element.Fragment,null,h(CompactColorControl,{label:__('Heatmap low colour','native-tables-charts'),value:config.heatmapLow||'',placeholder:'#ffffff',onChange:v=>patch({heatmapLow:v})}),h(CompactColorControl,{label:__('Heatmap high colour','native-tables-charts'),value:config.heatmapHigh||'',placeholder:'#000000',onChange:v=>patch({heatmapHigh:v})}),h(ToggleControl,{label:__('Heatmap labels','native-tables-charts'),checked:!!config.heatmapLabels,onChange:v=>patch({heatmapLabels:v})})),
-    h(CompactColorControl,{label:__('Background','native-tables-charts'),value:config.background||'',placeholder:'#09111b',onChange:v=>patch({background:v})}),
-    h(CompactColorControl,{label:__('Primary series','native-tables-charts'),value:config.primaryColor||'',placeholder:'#624b8e',onChange:v=>patch({primaryColor:v})}),
-    h(CompactColorControl,{label:__('Secondary series','native-tables-charts'),value:config.secondaryColor||'',placeholder:'#8b73b8',onChange:v=>patch({secondaryColor:v})}),
-    h(CompactColorControl,{label:__('Highlight','native-tables-charts'),value:config.highlightColor||'',placeholder:'#9e2f5f',onChange:v=>patch({highlightColor:v})}),
-    h(CompactColorControl,{label:__('Text colour','native-tables-charts'),value:config.textColor||'',placeholder:'#f5f7fa',onChange:v=>patch({textColor:v})}),
-    h(CompactColorControl,{label:__('Muted text','native-tables-charts'),value:config.mutedColor||'',placeholder:'#9ba8b8',onChange:v=>patch({mutedColor:v})}),
-    h(CompactColorControl,{label:__('Grid colour','native-tables-charts'),value:config.gridColor||'',placeholder:'#263445',onChange:v=>patch({gridColor:v})}),
-    h(SelectControl,{label:__('Dark mode','native-tables-charts'),value:config.themeMode||'fixed',options:[{label:__('Fixed theme','native-tables-charts'),value:'fixed'},{label:__('Auto (follows system)','native-tables-charts'),value:'auto'}],onChange:v=>patch({themeMode:v})}),
-    config.themeMode==='auto'&&h(wp.element.Fragment,null,
-      h(CompactColorControl,{label:__('Dark background','native-tables-charts'),value:config.darkBackground||'',placeholder:'#0f131a',onChange:v=>patch({darkBackground:v})}),
-      h(CompactColorControl,{label:__('Dark text','native-tables-charts'),value:config.darkTextColor||'',placeholder:'#e6e9ee',onChange:v=>patch({darkTextColor:v})}),
-      h(CompactColorControl,{label:__('Dark muted text','native-tables-charts'),value:config.darkMutedColor||'',placeholder:'#9aa5b1',onChange:v=>patch({darkMutedColor:v})}),
-      h(CompactColorControl,{label:__('Dark grid','native-tables-charts'),value:config.darkGridColor||'',placeholder:'#2a3442',onChange:v=>patch({darkGridColor:v})})
-    ),
+	 config.chartType==='histogram'&&h(RangeControl,{label:__('Histogram bins','native-tables-charts'),value:Number(config.histogramBins||8),min:3,max:20,onChange:v=>patch({histogramBins:v})}),
     h(ToggleControl,{label:__('Download buttons','native-tables-charts'),checked:!!config.enableExport,onChange:v=>patch({enableExport:v})}),
-    h(ToggleControl,{label:__('Schema.org metadata','native-tables-charts'),checked:!!config.enableSchema,onChange:v=>patch({enableSchema:v})}),
     h(ToggleControl,{label:__('Show last-updated date','native-tables-charts'),checked:!!config.showUpdatedDate,onChange:v=>patch({showUpdatedDate:v})})
   )
  );
 }
 
-function DataEditor({attributes,setAttributes,type}){
+function DataEditor({attributes,setAttributes,type,isSelected}){
  const columns=attributes.columns||defaultColumns();const rows=attributes.rows||defaultRows();
  const widthMode=attributes.widthMode||(attributes.align==='wide'?'wide':attributes.align==='full'?'full':'content');
  const widthClass='ntc-width-'+widthMode+(widthMode==='wide'?' alignwide':widthMode==='full'?' alignfull':'');
  const blockProps=useBlockProps({className:'ntc-block-editor-root '+widthClass});
  const setWidthMode=v=>setAttributes({widthMode:v,align:''});
- const [selected,setSelected]=useState({r:0,c:0});const [importOpen,setImportOpen]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [pickerOpen,setPickerOpen]=useState(false);const [loading,setLoading]=useState(false);const [status,setStatus]=useState('');const [customPresets,setCustomPresets]=useState([]);const [previewMode,setPreviewMode]=useState('desktop');const [editorMode,setEditorMode]=useState(type==='chart'?'preview':'data');const [focusOpen,setFocusOpen]=useState(false);const [styleOpen,setStyleOpen]=useState(false);
+ const [selected,setSelected]=useState({r:0,c:0});const [importOpen,setImportOpen]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [pickerOpen,setPickerOpen]=useState(false);const [loading,setLoading]=useState(false);const [status,setStatus]=useState('');const [customPresets,setCustomPresets]=useState([]);const [previewMode,setPreviewMode]=useState('desktop');const [editorMode,setEditorMode]=useState(type==='chart'?'preview':'data');const [focusOpen,setFocusOpen]=useState(false);const [styleOpen,setStyleOpen]=useState(false);const [cellPropertiesOpen,setCellPropertiesOpen]=useState(false);
  const dirtyRows=useRef(new Set());const saveTimer=useRef(null);const viewTimer=useRef(null);const latestRows=useRef(rows);const needsReplace=useRef(false);const loadingRemote=useRef(false);
  const chartConfig=type==='chart'?Object.assign({},CFG.chartDefaults||{},attributes.config||{}):{};
  const focusValues=type==='chart'?(chartConfig.highlightValues||[]).map(String):[];
@@ -657,9 +761,10 @@ function DataEditor({attributes,setAttributes,type}){
  const savePreset=async()=>{const name=window.prompt(__('Preset name','native-tables-charts'));if(!name)return;await apiFetch({path:'/ntc/v1/presets',method:'POST',data:{type,name,settings:attributes.config||{}}});const all=await apiFetch({path:'/ntc/v1/presets'});setCustomPresets(all.custom||[]);setStatus(__('Preset saved','native-tables-charts'));};
 
 
- const metricCount=type==='chart'?Math.max(1,(chartConfig.valueColumns||[]).length):columns.length;
+ const metricCount=type==='chart'?(chartConfig.valueColumns||[]).length:columns.length;
  const dataKind=attributes.viewId?__('Synced view','native-tables-charts'):attributes.datasetId?__('Reusable dataset','native-tables-charts'):__('Inline data','native-tables-charts');
  const summaryText=type==='chart'?rows.length+' '+(rows.length===1?__('row','native-tables-charts'):__('rows','native-tables-charts'))+' • '+metricCount+' '+(metricCount===1?__('metric','native-tables-charts'):__('metrics','native-tables-charts'))+' • '+dataKind:rows.length+' '+(rows.length===1?__('row','native-tables-charts'):__('rows','native-tables-charts'))+' • '+columns.length+' '+(columns.length===1?__('column','native-tables-charts'):__('columns','native-tables-charts'))+' • '+dataKind;
+ const chartIssues=type==='chart'?chartSetupIssues(columns,rows,chartConfig):[];
  const previewWidth=previewMode==='mobile'?'380px':previewMode==='tablet'?'720px':'100%';
  const selectionLabel=()=>{if(!selected)return __('No selection','native-tables-charts');const b=bounds();if(selected.r<0)return (columns[b.c1]&&columns[b.c1].label?columns[b.c1].label:__('Column','native-tables-charts')+' '+(b.c1+1))+(b.c2>b.c1?' – '+(columns[b.c2]&&columns[b.c2].label?columns[b.c2].label:(b.c2+1)):'');if(b.r1===b.r2&&b.c1===b.c2)return __('Row','native-tables-charts')+' '+(b.r1+1)+' • '+(columns[b.c1]&&columns[b.c1].label?columns[b.c1].label:__('Column','native-tables-charts')+' '+(b.c1+1));return (b.r2-b.r1+1)+' × '+(b.c2-b.c1+1)+' '+__('cells selected','native-tables-charts');};
  const moreControls=()=>{
@@ -694,15 +799,15 @@ function DataEditor({attributes,setAttributes,type}){
    controls.push({title:__('Clear all data','native-tables-charts'),onClick:clearData});
    return controls;
  };
- const MoreMenu=()=>C.DropdownMenu?h(C.DropdownMenu,{icon:'ellipsis',label:__('More data actions','native-tables-charts'),controls:moreControls(),toggleProps:{variant:'tertiary'}}):h(Button,{variant:'tertiary',onClick:()=>setExportOpen(true)},__('More','native-tables-charts'));
+ const MoreMenu=()=>h(Dropdown,{contentClassName:'ntc-more-popover',renderToggle:({isOpen,onToggle})=>h(Button,{variant:'tertiary',onClick:onToggle,'aria-expanded':isOpen},__('More','native-tables-charts')),renderContent:({onClose})=>h('div',{className:'ntc-more-menu'},moreControls().map((control,index)=>h(Button,{key:index,variant:'tertiary',disabled:!!control.disabled,onClick:()=>{onClose();control.onClick();}},control.title)))});
  const renderSelectionActions=()=>{
    if(!selected)return null;const b=bounds();
-   if(selected.r<0)return h('div',{className:'ntc-selection-toolbar'},h('strong',null,selectionLabel()),h(Button,{variant:'tertiary',onClick:()=>insertCol(b.c1),disabled:columns.length>=40},__('Insert left','native-tables-charts')),h(Button,{variant:'tertiary',onClick:duplicateCols,disabled:columns.length>=40},__('Duplicate','native-tables-charts')),h(Button,{variant:'tertiary',onClick:()=>moveCols(-1)},__('Move left','native-tables-charts')),h(Button,{variant:'tertiary',onClick:()=>moveCols(1)},__('Move right','native-tables-charts')),h(Button,{variant:'tertiary',isDestructive:true,onClick:deleteCols,disabled:columns.length<=1},__('Delete','native-tables-charts')));
-   return h('div',{className:'ntc-selection-toolbar'},h('strong',null,selectionLabel()),type==='chart'&&h(Button,{variant:focusValues.includes(String((rows[b.r1]||[])[labelColumn]??''))?'primary':'secondary',icon:focusValues.includes(String((rows[b.r1]||[])[labelColumn]??''))?'star-filled':'star-empty',onClick:()=>toggleRowFocus(b.r1)},focusValues.includes(String((rows[b.r1]||[])[labelColumn]??''))?__('Clear focus','native-tables-charts'):__('Set as chart focus','native-tables-charts')),h(Button,{variant:'tertiary',onClick:()=>insertRow(b.r1),disabled:rows.length>=10000},__('Insert above','native-tables-charts')),h(Button,{variant:'tertiary',onClick:duplicateRows,disabled:rows.length>=10000},__('Duplicate row','native-tables-charts')),h(Button,{variant:'tertiary',onClick:copySelection},__('Copy','native-tables-charts')),h(Button,{variant:'tertiary',onClick:clearSelection},__('Clear','native-tables-charts')),h(Button,{variant:'tertiary',isDestructive:true,onClick:deleteRows,disabled:rows.length<=1},__('Delete row','native-tables-charts')));
+    const cellButton=type==='table'&&h(Button,{variant:cellPropertiesOpen?'primary':'secondary',icon:'admin-generic','aria-expanded':cellPropertiesOpen?'true':'false',onClick:()=>setCellPropertiesOpen(!cellPropertiesOpen)},cellPropertiesOpen?__('Hide cell settings','native-tables-charts'):__('Cell settings','native-tables-charts'));
+    if(selected.r<0)return h('div',{className:'ntc-selection-toolbar'},h('strong',null,selectionLabel()),cellButton,h(Button,{variant:'tertiary',onClick:()=>insertCol(b.c1),disabled:columns.length>=40},__('Insert left','native-tables-charts')),h(Button,{variant:'tertiary',onClick:duplicateCols,disabled:columns.length>=40},__('Duplicate','native-tables-charts')),h(Button,{variant:'tertiary',onClick:()=>moveCols(-1)},__('Move left','native-tables-charts')),h(Button,{variant:'tertiary',onClick:()=>moveCols(1)},__('Move right','native-tables-charts')),h(Button,{variant:'tertiary',isDestructive:true,onClick:deleteCols,disabled:columns.length<=1},__('Delete','native-tables-charts')));
+    return h('div',{className:'ntc-selection-toolbar'},h('strong',null,selectionLabel()),cellButton,type==='chart'&&h(Button,{variant:focusValues.includes(String((rows[b.r1]||[])[labelColumn]??''))?'primary':'secondary',icon:focusValues.includes(String((rows[b.r1]||[])[labelColumn]??''))?'star-filled':'star-empty',onClick:()=>toggleRowFocus(b.r1)},focusValues.includes(String((rows[b.r1]||[])[labelColumn]??''))?__('Clear focus','native-tables-charts'):__('Set as chart focus','native-tables-charts')),h(Button,{variant:'tertiary',onClick:()=>insertRow(b.r1),disabled:rows.length>=10000},__('Insert above','native-tables-charts')),h(Button,{variant:'tertiary',onClick:duplicateRows,disabled:rows.length>=10000},__('Duplicate row','native-tables-charts')),h(Button,{variant:'tertiary',onClick:copySelection},__('Copy','native-tables-charts')),h(Button,{variant:'tertiary',onClick:clearSelection},__('Clear','native-tables-charts')),h(Button,{variant:'tertiary',isDestructive:true,onClick:deleteRows,disabled:rows.length<=1},__('Delete row','native-tables-charts')));
  };
  const renderDataWorkspace=(isFocus=false)=>h('div',{className:'ntc-data-workspace'+(isFocus?' is-focus':'')},
    h('div',{className:'ntc-data-toolbar'},
-     type==='chart'&&!isFocus&&h(Button,{variant:'primary',icon:'yes',onClick:()=>setEditorMode('preview')},__('Done editing data','native-tables-charts')),
      isFocus&&h(Button,{variant:'primary',icon:'yes',onClick:()=>setFocusOpen(false)},__('Done','native-tables-charts')),
      h(Button,{variant:'secondary',onClick:addRow,disabled:rows.length>=10000},__('Add row','native-tables-charts')),
      h(Button,{variant:'secondary',onClick:addCol,disabled:columns.length>=40},__('Add column','native-tables-charts')),
@@ -715,14 +820,13 @@ function DataEditor({attributes,setAttributes,type}){
    renderSelectionActions(),
    h('div',{className:'ntc-editor-shell'+(isFocus?' is-focus':'')},
      loading?h('div',{className:'ntc-editor-empty'},h(Spinner)):h(VirtualGrid,{columns,rows,onColumns:setColumns,onRows:(next,ri)=>setRows(next,ri,false),selected,onSelect:sel=>setSelected(prev=>{if(sel.r<0)return {r:-1,c:sel.c,r2:-1,c2:sel.c};if(sel.shift&&prev&&prev.r>=0)return {r:prev.r,c:prev.c,r2:sel.r,c2:sel.c};return {r:sel.r,c:sel.c,r2:sel.r,c2:sel.c};}),onDeleteRow:deleteRowAt,onDeleteCol:deleteColAt,focusValues:type==='chart'?focusValues:null,onToggleFocus:type==='chart'?toggleRowFocus:null,onFocusLabelChange:type==='chart'?updateFocusLabel:null,labelColumn,allowMultipleFocus}),
-     type==='table'&&h(CellProperties,{selected,cellMeta:attributes.cellMeta||{},setCellMeta:v=>setAttributes({cellMeta:v})})
+      type==='table'&&cellPropertiesOpen&&h(CellProperties,{selected,cellMeta:attributes.cellMeta||{},setCellMeta:v=>setAttributes({cellMeta:v})})
    ),
    rows.length>(CFG.maxInlineRows||250)&&attributes.mode==='inline'&&h('div',{className:'ntc-large-note'},__('This inline dataset is large. Save it as a reusable dataset for better post-editor performance.','native-tables-charts'))
  );
- const renderPreview=()=>h('div',{className:'ntc-chart-preview-shell'},
-   SSR&&rows.length<=500?h('div',{className:'ntc-preview-viewport is-'+previewMode,style:{maxWidth:previewWidth}},h(SSR,{block:type==='chart'?'ntc/chart':'ntc/table',attributes})):h('div',{className:'ntc-large-note'},__('In-editor rendering is disabled for datasets over 500 rows to keep Gutenberg fast. Use WordPress Preview to inspect the published layout.','native-tables-charts')),
-   h('div',{className:'ntc-data-summary'},h(Button,{variant:'tertiary',onClick:()=>setEditorMode('data'),icon:'editor-table'},summaryText),type==='chart'&&h('span',{className:'ntc-preview-size'},previewMode==='desktop'?__('Desktop preview','native-tables-charts'):previewMode==='tablet'?__('Tablet preview','native-tables-charts'):__('Mobile preview','native-tables-charts')))
- );
+  const renderPreview=contentOnly=>h('div',{className:'ntc-chart-preview-shell'+(contentOnly?' is-content-only':'')},
+     SSR&&rows.length<=500?h('div',{className:'ntc-preview-viewport is-'+previewMode,style:{maxWidth:previewWidth}},h(SSR,{block:type==='chart'?'ntc/chart':'ntc/table',attributes,httpMethod:'POST'})):h('div',{className:'ntc-large-note'},__('In-editor rendering is disabled for datasets over 500 rows to keep Gutenberg fast. Use WordPress Preview to inspect the published layout.','native-tables-charts')),
+  );
  const widthMenu=h(DropdownMenu,{
    icon:widthMode==='full'?'fullscreen-alt':widthMode==='wide'?'align-wide':'align-center',
    label:__('Block width','native-tables-charts'),
@@ -733,37 +837,24 @@ function DataEditor({attributes,setAttributes,type}){
      {title:__('Full width','native-tables-charts'),icon:'fullscreen-alt',isActive:widthMode==='full',onClick:()=>setWidthMode('full')}
    ]
  });
- const blockControls=type==='chart'?h(BlockControls,null,
-   h(ToolbarGroup,null,widthMenu),
-   h(ToolbarGroup,null,
-     h(ToolbarButton,{icon:'visibility',label:__('Preview chart','native-tables-charts'),isPressed:editorMode==='preview',onClick:()=>setEditorMode('preview')}),
-     h(ToolbarButton,{icon:'editor-table',label:__('Edit chart data','native-tables-charts'),isPressed:editorMode==='data',onClick:()=>setEditorMode('data')}),
-     h(ToolbarButton,{icon:'columns',label:__('Split data and preview','native-tables-charts'),isPressed:editorMode==='split',onClick:()=>setEditorMode('split')}),
-     h(ToolbarButton,{icon:'fullscreen-alt',label:__('Open data focus mode','native-tables-charts'),onClick:()=>setFocusOpen(true)}),
-     h(ToolbarButton,{icon:'art',label:__('Edit chart style','native-tables-charts'),onClick:()=>setStyleOpen(true)})
-   ),
-   h(ToolbarGroup,null,
-     h(ToolbarButton,{icon:'desktop',label:__('Desktop preview','native-tables-charts'),isPressed:previewMode==='desktop',onClick:()=>setPreviewMode('desktop')}),
-     h(ToolbarButton,{icon:'tablet',label:__('Tablet preview','native-tables-charts'),isPressed:previewMode==='tablet',onClick:()=>setPreviewMode('tablet')}),
-     h(ToolbarButton,{icon:'smartphone',label:__('Mobile preview','native-tables-charts'),isPressed:previewMode==='mobile',onClick:()=>setPreviewMode('mobile')})
-   )
- ):h(BlockControls,null,
-   h(ToolbarGroup,null,widthMenu),
-   h(ToolbarGroup,null,
-     h(ToolbarButton,{icon:'editor-table',label:__('Edit table data','native-tables-charts'),isPressed:editorMode==='data',onClick:()=>setEditorMode('data')}),
-     h(ToolbarButton,{icon:'visibility',label:__('Preview table','native-tables-charts'),isPressed:editorMode==='preview',onClick:()=>setEditorMode('preview')}),
-     h(ToolbarButton,{icon:'fullscreen-alt',label:__('Open table focus mode','native-tables-charts'),onClick:()=>setFocusOpen(true)}),
-     h(ToolbarButton,{icon:'upload',label:__('Import/paste data','native-tables-charts'),onClick:()=>setImportOpen(true)}),
-     h(ToolbarButton,{icon:'art',label:__('Edit table style','native-tables-charts'),onClick:()=>setStyleOpen(true)})
-   )
- );
+  const blockControls=h(BlockControls,null,h(ToolbarGroup,null,widthMenu));
+  const workspaceBody=editorMode==='preview'?renderPreview(false):editorMode==='split'&&type==='chart'?h('div',{className:'ntc-split-layout'},renderDataWorkspace(false),renderPreview(false)):renderDataWorkspace(false);
+  const workspace=type==='chart'?h('div',{className:'ntc-chart-workspace'},
+    h(ChartWorkspaceHeader,{config:chartConfig,rowCount:rows.length,metricCount,dataKind,editorMode,onModeChange:setEditorMode,previewMode,onPreviewModeChange:setPreviewMode,onEditStyle:()=>setStyleOpen(true),issues:chartIssues}),
+    h('div',{className:'ntc-chart-workspace-body'},workspaceBody)
+  ):h('div',{className:'ntc-chart-workspace ntc-table-workspace'},
+    h(TableWorkspaceHeader,{rowCount:rows.length,columnCount:columns.length,dataKind,editorMode,onModeChange:setEditorMode,previewMode,onPreviewModeChange:setPreviewMode,onEditStyle:()=>setStyleOpen(true)}),
+    h('div',{className:'ntc-chart-workspace-body'},workspaceBody)
+  );
+
+  if(!isSelected)return h('div',blockProps,renderPreview(true));
 
  return h(wp.element.Fragment,null,
    type==='table'?h(TableInspector,{attributes,setAttributes,selected,customPresets}):h(ChartInspector,{attributes,setAttributes,customPresets,onEditData:()=>setEditorMode('data'),onFocusData:()=>setFocusOpen(true)}),
    h(InspectorControls,null,h(PanelBody,{title:__('Layout','native-tables-charts'),initialOpen:false},h(SelectControl,{label:__('Width','native-tables-charts'),value:widthMode,options:[{label:__('Content width','native-tables-charts'),value:'content'},{label:__('Wide width','native-tables-charts'),value:'wide'},{label:__('Full width','native-tables-charts'),value:'full'}],onChange:setWidthMode}),h('p',{className:'ntc-inspector-note'},__('Content width matches the normal article column. Wide and Full are deliberate breakout layouts.','native-tables-charts')))),
    h(StyleInspector,{type,attributes,setAttributes,customPresets}),
    blockControls,
-   h('div',blockProps,editorMode==='preview'?renderPreview():editorMode==='split'&&type==='chart'?h('div',{className:'ntc-split-layout'},renderDataWorkspace(false),renderPreview()):renderDataWorkspace(false)),
+   h('div',blockProps,workspace),
    focusOpen&&h(Modal,{title:(type==='chart'?(chartConfig.title||__('Chart','native-tables-charts')):__('Table','native-tables-charts'))+' — '+__('Data','native-tables-charts'),onRequestClose:()=>setFocusOpen(false),className:'ntc-focus-modal'},renderDataWorkspace(true)),
    styleOpen&&h(QuickStyleModal,{type,attributes,setAttributes,customPresets,onClose:()=>setStyleOpen(false)}),
    importOpen&&h(DataImportModal,{onClose:()=>setImportOpen(false),onImport:importData}),

@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 2.0.0
+Stable tag: 3.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -79,6 +79,9 @@ Inserter variations include Blank Data Table, Product Comparison, Specifications
 * Multi-series line chart.
 * Scatter-style point chart.
 * Donut chart.
+* Combo, histogram, box-and-whisker, waterfall, bullet, bubble, funnel, range-bar, timeline/Gantt and slope charts.
+* Treemap, sunburst, Sankey, candlestick/OHLC, error-bar, calendar-heatmap and population-pyramid charts.
+* Likert, Pareto, streamgraph, parallel-coordinates, network, choropleth/region-map and polar-area charts.
 * Gutenberg data editing without an external chart service. Charts default to a clean Preview mode, with dedicated Data, optional Split, and full-screen Focus modes.
 * Responsive layouts based on the chart container, with a configurable mobile breakpoint.
 * Automatic-height charts by default, with optional 16:9, 4:3 and square aspect ratios.
@@ -95,7 +98,7 @@ Inserter variations include Blank Data Table, Product Comparison, Specifications
 * Multi-series legend for grouped, stacked, line and scatter charts.
 * Footer, secondary footer and source fields for benchmark/system configuration notes.
 * Accessible chart labels and a semantic HTML data representation with Screen readers only, Collapsible, Always visible and Disabled output modes.
-* Built-in chart themes: Benchmark Dark, Benchmark Light, Benchmark Compact, Editorial Light, Editorial Dark, Minimal, High Contrast, Feature, Comparison and Technical, with visual previews in Gutenberg.
+* Built-in chart themes include benchmark, editorial, dashboard, accessible, print/grayscale, financial, scientific, soft-neutral, high-impact dark, brand-inherit and compact-mobile treatments, with visual previews in Gutenberg.
 * Save, import and export custom chart style presets.
 
 = Editor settings =
@@ -181,6 +184,30 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 3.0.0 =
+* Added 24 specialized native chart renderers: combo, histogram, boxplot, waterfall, bullet, bubble, funnel, range, timeline, slope, treemap, sunburst, Sankey, candlestick, error bars, calendar heatmap, population pyramid, Likert, Pareto, streamgraph, parallel coordinates, network, region choropleth and polar area.
+* Expanded the Gutenberg chart chooser with question-based groups, chart-specific data mapping guidance and validation.
+* Added Dashboard, Accessible, Print Grayscale, Financial, Scientific, Soft Neutral, High Impact Dark, Brand Inherit and Compact Mobile chart themes.
+* Added responsive presentation and PNG export support for the advanced SVG chart family.
+* Removed the unexplained table outline by default and added explicit outer-frame width, colour and radius settings.
+* Includes the 2.0.1–2.0.3 chart workspace, responsive table layout and frontend-control corrections.
+
+= 2.0.3 =
+* Corrected table box sizing so bordered previews remain centered without pushing past their right edge.
+* Made chart and table editor workspaces respond to their actual block width, including nested and narrow Gutenberg canvases.
+* Improved compact editor controls for tablet and mobile widths.
+* Fixed Gutenberg previews so table search, pagination and CSV controls immediately follow their inspector settings.
+
+= 2.0.2 =
+* Inactive chart and table blocks now show only their published-content preview, including inside Gutenberg's transform menu.
+* Added a clearly labelled table workspace with Data, Preview, responsive preview and Style controls.
+* Collapsed advanced cell settings behind an intentional control and removed unnecessary horizontal scrollbars from simple tables.
+
+= 2.0.1 =
+* Reworked the Native Data Chart editor around a clear Preview, Data and Split workspace.
+* Added an intent-based chart type browser, consolidated data mapping, chart setup validation, and responsive preview controls.
+* Reduced block-toolbar clutter and moved chart colour settings into the Gutenberg Styles tab.
 
 = 2.0.0 =
 * Major chart expansion: tooltips, date/time x-axis, area, radar, gauge, change, dumbbell, small multiples and heatmap chart types.
