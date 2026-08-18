@@ -753,6 +753,124 @@ $mini_chart = $call(
 	)
 );
 $assert( false !== strpos( $mini_chart, 'ntc-mini-grid' ), 'render_chart dispatches small-multiples type' );
+$hm_defaults = NTC_Renderer::chart_defaults();
+$assert( '#ffffff' === $hm_defaults['heatmapLow'] && '#624b8e' === $hm_defaults['heatmapHigh'] && true === $hm_defaults['heatmapLabels'], 'chart_defaults includes heatmap colors and labels' );
+$heatmap = $call(
+	'chart_heatmap',
+	array(
+		array( 'A', 0, 100 ),
+		array( 'B', 50, 25 ),
+	),
+	array(
+		array(
+			'id'    => 'c1',
+			'label' => 'Item',
+			'type'  => 'text',
+			'unit'  => '',
+		),
+		array(
+			'id'    => 'c2',
+			'label' => 'Q1',
+			'type'  => 'number',
+			'unit'  => '',
+		),
+		array(
+			'id'    => 'c3',
+			'label' => 'Q2',
+			'type'  => 'number',
+			'unit'  => '',
+		),
+	),
+	array(
+		'labelColumn'   => 0,
+		'valueColumns'  => array( 1, 2 ),
+		'heatmapLow'    => '#ffffff',
+		'heatmapHigh'   => '#624b8e',
+		'heatmapLabels' => true,
+	)
+);
+$assert( false !== strpos( $heatmap, '<td style="background:#ffffff">0</td>' ), 'heatmap low cell uses low color with label' );
+$assert( false !== strpos( $heatmap, '<td style="background:#624b8e">100</td>' ), 'heatmap high cell uses high color with label' );
+$assert( false !== strpos( $heatmap, 'background:#b1a5c7' ), 'heatmap mid cell lerps between colors' );
+$hm_no_labels = $call(
+	'chart_heatmap',
+	array( array( 'A', 0, 100 ) ),
+	array(
+		array(
+			'id'    => 'c1',
+			'label' => 'Item',
+			'type'  => 'text',
+			'unit'  => '',
+		),
+		array(
+			'id'    => 'c2',
+			'label' => 'Q1',
+			'type'  => 'number',
+			'unit'  => '',
+		),
+		array(
+			'id'    => 'c3',
+			'label' => 'Q2',
+			'type'  => 'number',
+			'unit'  => '',
+		),
+	),
+	array(
+		'labelColumn'   => 0,
+		'valueColumns'  => array( 1, 2 ),
+		'heatmapLabels' => false,
+	)
+);
+$assert( false !== strpos( $hm_no_labels, '<td style="background:#ffffff"></td>' ) && false === strpos( $hm_no_labels, '>100</td>' ), 'heatmap labels absent when disabled' );
+$hm_escaped = $call(
+	'chart_heatmap',
+	array( array( '<b>X</b>', 1 ) ),
+	array(
+		array(
+			'id'    => 'c1',
+			'label' => '<i>Item</i>',
+			'type'  => 'text',
+			'unit'  => '',
+		),
+		array(
+			'id'    => 'c2',
+			'label' => '<i>Val</i>',
+			'type'  => 'number',
+			'unit'  => '',
+		),
+	),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+	)
+);
+$assert( false !== strpos( $hm_escaped, '&lt;b&gt;X&lt;/b&gt;' ) && false !== strpos( $hm_escaped, '&lt;i&gt;Item&lt;/i&gt;' ) && false !== strpos( $hm_escaped, '&lt;i&gt;Val&lt;/i&gt;' ), 'heatmap escapes row and column headers' );
+$heatmap_chart = $call(
+	'render_chart',
+	array(
+		'columns' => array(
+			array(
+				'id'    => 'c1',
+				'label' => 'Item',
+				'type'  => 'text',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c2',
+				'label' => 'Q1',
+				'type'  => 'number',
+				'unit'  => '',
+			),
+		),
+		'rows'    => array( array( 'A', 0 ), array( 'B', 100 ) ),
+		'config'  => array(
+			'chartType'    => 'heatmap',
+			'labelColumn'  => 0,
+			'valueColumns' => array( 1 ),
+		),
+	)
+);
+$assert( false !== strpos( $heatmap_chart, 'ntc-heatmap' ), 'render_chart dispatches heatmap type' );
 $GLOBALS['fake_wp_posts'] = array(
 	new WP_Post( 1, 'Post A' ),
 	new WP_Post( 2, 'Post B' ),

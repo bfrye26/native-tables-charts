@@ -143,6 +143,9 @@ final class NTC_Renderer {
 			'radarMax'                => 0,
 			'gaugeMin'                => 0,
 			'gaugeMax'                => 100,
+			'heatmapLow'              => '#ffffff',
+			'heatmapHigh'             => '#624b8e',
+			'heatmapLabels'           => true,
 			'multiplesPerRow'         => 3,
 			'unit'                    => '',
 			'decimals'                => 'auto',
@@ -1325,6 +1328,9 @@ final class NTC_Renderer {
 			case 'small-multiples':
 				$out .= $this->chart_small_multiples( $chart_rows, $columns, $config );
 				break;
+			case 'heatmap':
+				$out .= $this->chart_heatmap( $chart_rows, $columns, $config );
+				break;
 			case 'horizontal-bar':
 			default:
 				$out .= $this->chart_horizontal( $chart_rows, $columns, $config );
@@ -1969,6 +1975,42 @@ final class NTC_Renderer {
 		$out      .= '<text x="' . $cx . '" y="' . ( $cy - 6 ) . '" class="ntc-gauge-number">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</text>';
 		$out      .= '<text x="' . $cx . '" y="' . ( $cy + 22 ) . '" class="ntc-gauge-label">' . esc_html( $this->truncate( (string) ( $rows[0][ $l ] ?? '' ), 24 ) ) . '</text>';
 		return $out . '</svg></div>';
+	}
+
+	private function chart_heatmap( array $rows, array $columns, array $c ): string {
+		$l    = absint( $c['labelColumn'] );
+		$vals = array_slice( array_map( 'absint', (array) $c['valueColumns'] ), 0, 12 );
+		if ( ! $vals ) {
+			$vals = array( 1 );
+		}
+		$min = PHP_FLOAT_MAX;
+		$max = PHP_FLOAT_MIN;
+		foreach ( $rows as $r ) {
+			foreach ( $vals as $v ) {
+				$n   = NTC_Formulas::numeric( $r[ $v ] ?? '' );
+				$min = min( $min, $n );
+				$max = max( $max, $n );
+			}
+		}
+		$span = ( $max - $min ) ? ( $max - $min ) : 1;
+		$low  = self::safe_css_value( $c['heatmapLow'] ?? '#ffffff' );
+		$high = self::safe_css_value( $c['heatmapHigh'] ?? '#624b8e' );
+		$out  = '<div class="ntc-heatmap-wrap"><table class="ntc-heatmap"><thead><tr><th scope="col">' . esc_html( $columns[ $l ]['label'] ?? __( 'Item', 'native-tables-charts' ) ) . '</th>';
+		foreach ( $vals as $v ) {
+			$out .= '<th scope="col">' . esc_html( $columns[ $v ]['label'] ?? ( 'C' . ( $v + 1 ) ) ) . '</th>';
+		}
+		$out .= '</tr></thead><tbody>';
+		foreach ( $rows as $r ) {
+			$out .= '<tr><th scope="row">' . esc_html( (string) ( $r[ $l ] ?? '' ) ) . '</th>';
+			foreach ( $vals as $v ) {
+				$n    = NTC_Formulas::numeric( $r[ $v ] ?? '' );
+				$t    = max( 0.0, min( 1.0, ( $n - $min ) / $span ) );
+				$bg   = self::lerp_color( $low, $high, (float) $t );
+				$out .= '<td style="background:' . esc_attr( $bg ) . '">' . ( ! empty( $c['heatmapLabels'] ) ? esc_html( (string) ( $r[ $v ] ?? '' ) ) : '' ) . '</td>';
+			}
+			$out .= '</tr>';
+		}
+		return $out . '</tbody></table></div>';
 	}
 
 	private function accessible_chart_table( array $rows, array $columns, array $c ): string {
