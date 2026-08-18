@@ -354,6 +354,7 @@ $gauge = $call(
 	)
 );
 $assert( false !== strpos( $gauge, 'ntc-gauge-value' ) && false !== strpos( $gauge, '>50</text>' ), 'gauge renders value arc and 50' );
+$assert( false !== strpos( $gauge, 'viewBox="0 0 320 280"' ), 'gauge viewBox fits full arc' );
 $assert( false !== strpos( $gauge, 'Score' ) && false !== strpos( $gauge, 'Score gauge' ), 'gauge renders label and aria title' );
 $gauge_band = $call(
 	'chart_gauge',

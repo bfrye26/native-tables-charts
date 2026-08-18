@@ -1688,7 +1688,7 @@ final class NTC_Renderer {
 	}
 
 	private function chart_gauge( array $rows, array $columns, array $c ): string {
-		$l   = absint( $c['labelColumn'] );
+		$l   = absint( $c['labelColumn'] ?? 0 );
 		$v   = absint( $c['valueColumns'][0] ?? 1 );
 		$val = NTC_Formulas::numeric( $rows[0][ $v ] ?? 0 );
 		$min = (float) ( $c['gaugeMin'] ?? 0 );
@@ -1711,7 +1711,7 @@ final class NTC_Renderer {
 			$large = abs( $a1 - $a0 ) > pi() ? 1 : 0;
 			return 'M ' . $x0 . ' ' . $y0 . ' A ' . $r . ' ' . $r . ' 0 ' . $large . ' 1 ' . $x1 . ' ' . $y1;
 		};
-		$out  = '<div class="ntc-gauge-wrap"><svg class="ntc-gauge" viewBox="0 0 320 210" role="img" aria-label="' . esc_attr( ! empty( $c['title'] ) ? $c['title'] : __( 'Gauge chart', 'native-tables-charts' ) ) . '">';
+		$out  = '<div class="ntc-gauge-wrap"><svg class="ntc-gauge" viewBox="0 0 320 280" role="img" aria-label="' . esc_attr( ! empty( $c['title'] ) ? $c['title'] : __( 'Gauge chart', 'native-tables-charts' ) ) . '">';
 		$out .= '<path d="' . esc_attr( $arc( $ang0, $ang1 ) ) . '" class="ntc-gauge-bg"/>';
 		foreach ( array_slice( (array) ( $c['referenceLines'] ?? array() ), 0, 5 ) as $rl ) {
 			$tv   = (float) ( $rl['value'] ?? 0 );
