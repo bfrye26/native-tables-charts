@@ -49,6 +49,9 @@ function get_current_user_id() {
 	return 1; }
 function get_option( $k, $d = false ) {
 	$GLOBALS['asked_options'][] = $k;
+	if ( isset( $GLOBALS['fake_options'] ) && array_key_exists( $k, $GLOBALS['fake_options'] ) ) {
+		return $GLOBALS['fake_options'][ $k ];
+	}
 	return $d; }
 function get_date_from_gmt( $t, $f = '' ) {
 	return (string) $t; }
@@ -158,6 +161,9 @@ function wp_generate_password( $length = 12, $special_chars = true, $extra_speci
 	return 'abc123'; }
 function update_option( $option, $value, $autoload = null ) {
 	$GLOBALS['last_option'] = array( $option, $value );
+	if ( isset( $GLOBALS['fake_options'] ) ) {
+		$GLOBALS['fake_options'][ $option ] = $value;
+	}
 	return true; }
 function sanitize_textarea_field( $str ) {
 	return (string) $str; }
@@ -201,11 +207,8 @@ $GLOBALS['wpdb'] = new class() {
 		if ( false !== strpos( $q, 'ntc_backups' ) && isset( $GLOBALS['fake_backup_count'] ) ) {
 			return $GLOBALS['fake_backup_count'];
 		}
-		if ( false !== strpos( $q, 'wp_posts' ) && false !== strpos( $q, 'ID >' ) && isset( $GLOBALS['fake_post_remaining'] ) ) {
-			return $GLOBALS['fake_post_remaining'];
-		}
-		if ( false !== strpos( $q, 'wp_posts' ) && isset( $GLOBALS['fake_post_count'] ) ) {
-			return $GLOBALS['fake_post_count'];
+		if ( false !== strpos( $q, 'dalt_table' ) && false !== strpos( $q, 'id >' ) && isset( $GLOBALS['fake_legacy_table_remaining'] ) ) {
+			return $GLOBALS['fake_legacy_table_remaining'];
 		}
 		return null; }
 	public function get_row( $q, $o = 'OBJECT' ) {
@@ -218,6 +221,17 @@ $GLOBALS['wpdb'] = new class() {
 		return null; }
 	public function get_results( $q, $o = 'OBJECT' ) {
 		$this->queries[] = $q;
+		if ( false !== strpos( $q, 'dalt_table' ) && isset( $GLOBALS['fake_legacy_tables'] ) ) {
+			$tables = $GLOBALS['fake_legacy_tables'];
+			if ( preg_match( '/id > (\d+)/', $q, $cursor_match ) ) {
+				$cursor = (int) $cursor_match[1];
+				$tables = array_values( array_filter( $tables, static fn( $table ) => (int) $table['id'] > $cursor ) );
+			}
+			if ( preg_match( '/LIMIT (\d+)/', $q, $limit_match ) ) {
+				$tables = array_slice( $tables, 0, (int) $limit_match[1] );
+			}
+			return $tables;
+		}
 		if ( false !== strpos( $q, 'wp_posts' ) && isset( $GLOBALS['fake_posts'] ) ) {
 			$posts = $GLOBALS['fake_posts'];
 			if ( preg_match( '/ID > (\d+)/', $q, $cursor_match ) ) {

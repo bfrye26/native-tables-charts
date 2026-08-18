@@ -4,13 +4,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class NTC_Migrator {
 	public const POST_BATCH_SIZE        = 20;
+	public const POST_SCAN_BATCH_SIZE   = 100;
 	private const POST_TIME_BUDGET_SECS = 12.0;
 
 	private NTC_Repository $repo;
 	public function __construct( NTC_Repository $repo ) {
 		$this->repo = $repo;}
 
-	public function detect( bool $include_instances = true ): array {
+	public function detect( bool $include_instances = true, bool $include_posts = true ): array {
 		global $wpdb;
 		$tables = array(
 			'table' => $wpdb->prefix . 'dalt_table',
@@ -23,7 +24,7 @@ final class NTC_Migrator {
 		$count          = $exists['table'] ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tables['table']} WHERE temporary=0" ) : 0; // phpcs:ignore WordPress.DB.PreparedSQL -- table names are internal identifiers, cannot be prepared.
 		$post_count     = 0;
 		$instance_count = 0;
-		if ( $count ) {
+		if ( $count && $include_posts ) {
 			$where = "post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')";
 			if ( $include_instances ) {
 				$posts = $wpdb->get_results( "SELECT ID,post_content FROM {$wpdb->posts} WHERE {$where}", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
@@ -81,8 +82,7 @@ final class NTC_Migrator {
 				'error'   => __( 'Permission denied.', 'native-tables-charts' ),
 			);
 		}
-		global $wpdb;
-		$detect = $this->detect( false );
+		$detect = $this->detect( false, false );
 		if ( ! $detect['available'] ) {
 			return array(
 				'success' => false,
@@ -137,81 +137,115 @@ final class NTC_Migrator {
 				update_option( 'ntc_cell_features', array_merge( NTC_Renderer::cell_feature_defaults(), $legacy_features ), false );
 			}
 		}
-		$source=$wpdb->prefix.'dalt_table';$tables=$wpdb->get_results("SELECT * FROM {$source} WHERE temporary=0 ORDER BY id ASC",ARRAY_A)?:array(); // phpcs:ignore
-		$map     = (array) get_option( 'ntc_migration_map', array() );
-		$created = 0;
-		$errors  = array();
-		foreach ( $tables as $t ) {
-			$old = (int) $t['id'];
-			if ( isset( $map[ $old ] ) && $this->repo->get_dataset( (int) $map[ $old ], false ) ) {
-				continue;
-			}try {
-				$new = $this->migrate_table( $t );
-				if ( $new ) {
-					$map[ $old ] = $new;
-						++$created;
-				}
-			} catch ( Throwable $e ) {
-				$errors[] = 'Table ' . $old . ': ' . $e->getMessage();}
-		}
-		update_option( 'ntc_migration_map', $map, false );
-		$batch     = 'lt-' . gmdate( 'YmdHis' ) . '-' . wp_generate_password( 6, false, false );
-		$posts     = 0;
-		$instances = 0;
-		$total     = 0;
-		$processed = 0;
-		$result    = array(
-			'remaining'   => 0,
-			'next_cursor' => max( 0, $cursor ),
-		);
-		if ( $convert_content ) {
-			$result    = $this->convert_posts( $map, $batch, $cursor, $chunk );
-			$posts     = $result['posts'];
-			$instances = $result['instances'];
-			$total     = $result['total'];
-			$processed = $result['processed'];
-			$errors    = array_merge( $errors, $result['errors'] );}
-		return array(
-			'success'             => empty( $errors ),
-			'datasets_created'    => $created,
-			'posts_updated'       => $posts,
-			'instances_converted' => $instances,
-			'batch_id'            => $batch,
-			'errors'              => $errors,
-			'map'                 => $map,
-			'posts_total'         => $total,
-			'processed'           => $processed,
-			'posts_remaining'     => (int) ( $result['remaining'] ?? 0 ),
-			'next_cursor'         => (int) ( $result['next_cursor'] ?? max( 0, $cursor ) ),
-		);
+		$batch = 'lt-' . gmdate( 'YmdHis' ) . '-' . wp_generate_password( 6, false, false );
+		return $this->run_migration_batch( $batch, $convert_content, 0, $cursor, $chunk, (int) $detect['tables'] );
 	}
 
-	public function continue_migration( string $batch_id, int $cursor, int $chunk = self::POST_BATCH_SIZE ): array {
+	public function continue_migration( string $batch_id, int $cursor, int $chunk = self::POST_BATCH_SIZE, int $table_cursor = 0, bool $convert_content = true ): array {
 		if ( ! current_user_can( 'ntc_migrate' ) && ! current_user_can( 'manage_options' ) ) {
 			return array(
 				'success' => false,
 				'error'   => __( 'Permission denied.', 'native-tables-charts' ),
 			);
 		}
-		$map = (array) get_option( 'ntc_migration_map', array() );
-		if ( ! $map ) {
-			return array(
-				'success'  => false,
-				'error'    => __( 'No migration map found.', 'native-tables-charts' ),
-				'batch_id' => $batch_id,
-			);
+		return $this->run_migration_batch( $batch_id, $convert_content, $table_cursor, $cursor, $chunk );
+	}
+
+	private function run_migration_batch( string $batch_id, bool $convert_content, int $table_cursor, int $post_cursor, int $post_chunk, int $table_total = 0 ): array {
+		$map    = (array) get_option( 'ntc_migration_map', array() );
+		$tables = $this->migrate_tables( $map, $table_cursor );
+		$map    = $tables['map'];
+		update_option( 'ntc_migration_map', $map, false );
+		$base = array(
+			'success'             => empty( $tables['errors'] ),
+			'datasets_created'    => $tables['created'],
+			'posts_updated'       => 0,
+			'instances_converted' => 0,
+			'batch_id'            => $batch_id,
+			'errors'              => $tables['errors'],
+			'map'                 => $map,
+			'posts_total'         => 0,
+			'processed'           => 0,
+			'posts_remaining'     => 0,
+			'next_cursor'         => max( 0, $post_cursor ),
+			'tables_total'        => $table_total > 0 ? $table_total : $tables['processed'] + $tables['remaining'],
+			'tables_processed'    => $tables['processed'],
+			'tables_remaining'    => $tables['remaining'],
+			'next_table_cursor'   => $tables['next_cursor'],
+			'phase'               => 'tables',
+			'migration_complete'  => false,
+		);
+		// Always end the request after scanning or importing legacy tables. This keeps
+		// a potentially expensive table import separate from post updates.
+		if ( $tables['processed'] > 0 || $tables['remaining'] > 0 ) {
+			return $base;
 		}
-		$result = $this->convert_posts( $map, $batch_id, $cursor, $chunk );
+		if ( ! $convert_content ) {
+			$base['phase']              = 'complete';
+			$base['migration_complete'] = true;
+			return $base;
+		}
+		$result = $this->convert_posts( $map, $batch_id, $post_cursor, $post_chunk );
 		return array(
-			'success'             => empty( $result['errors'] ),
+			'success'             => empty( $base['errors'] ) && empty( $result['errors'] ),
+			'datasets_created'    => $base['datasets_created'],
 			'posts_updated'       => $result['posts'],
 			'instances_converted' => $result['instances'],
 			'batch_id'            => $batch_id,
-			'errors'              => $result['errors'],
+			'errors'              => array_merge( $base['errors'], $result['errors'] ),
+			'map'                 => $map,
 			'posts_total'         => $result['total'],
 			'processed'           => $result['processed'],
 			'posts_remaining'     => $result['remaining'],
 			'next_cursor'         => $result['next_cursor'],
+			'tables_total'        => $base['tables_total'],
+			'tables_processed'    => 0,
+			'tables_remaining'    => 0,
+			'next_table_cursor'   => $tables['next_cursor'],
+			'phase'               => $result['remaining'] > 0 ? 'posts' : 'complete',
+			'migration_complete'  => 0 === $result['remaining'],
+		);
+	}
+
+	private function migrate_tables( array $map, int $cursor = 0, int $limit = 20 ): array {
+		global $wpdb;
+		$cursor = max( 0, $cursor );
+		$limit  = max( 1, min( 100, $limit ) );
+		$source = $wpdb->prefix . 'dalt_table';
+		$tables = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$source} WHERE temporary=0 AND id > %d ORDER BY id ASC LIMIT %d", $cursor, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- the table name is an internal identifier and cannot be prepared.
+		if ( ! $tables ) {
+			$tables = array();
+		}
+		$created   = 0;
+		$processed = 0;
+		$errors    = array();
+		$next      = $cursor;
+		foreach ( $tables as $table ) {
+			$old  = (int) $table['id'];
+			$next = max( $next, $old );
+			++$processed;
+			if ( isset( $map[ $old ] ) && $this->repo->get_dataset( (int) $map[ $old ], false ) ) {
+				continue;
+			}
+			try {
+				$new = $this->migrate_table( $table );
+				if ( $new ) {
+					$map[ $old ] = $new;
+					++$created;
+				}
+			} catch ( Throwable $e ) {
+				$errors[] = 'Table ' . $old . ': ' . $e->getMessage();
+			}
+			break;
+		}
+		$remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$source} WHERE temporary=0 AND id > %d", $next ) ); // phpcs:ignore WordPress.DB.PreparedSQL -- the table name is an internal identifier and cannot be prepared.
+		return array(
+			'map'         => $map,
+			'created'     => $created,
+			'processed'   => $processed,
+			'remaining'   => $remaining,
+			'next_cursor' => $next,
+			'errors'      => $errors,
 		);
 	}
 
@@ -537,10 +571,10 @@ final class NTC_Migrator {
 	private function convert_posts( array $map, string $batch, int $cursor = 0, int $chunk = self::POST_BATCH_SIZE ): array {
 		global $wpdb;
 		$chunk  = max( 1, min( 100, $chunk ) );
+		$scan   = max( $chunk, self::POST_SCAN_BATCH_SIZE );
 		$cursor = max( 0, $cursor );
-		$where  = "post_status NOT IN ('trash','auto-draft') AND (post_content LIKE '%[lt %' OR post_content LIKE '%wp:dalt/table%')";
-		$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE {$where}" ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
-		$posts  = $wpdb->get_results( $wpdb->prepare( "SELECT ID,post_content FROM {$wpdb->posts} WHERE {$where} AND ID > %d ORDER BY ID ASC LIMIT %d", $cursor, $chunk ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
+		$where  = "post_status NOT IN ('trash','auto-draft')";
+		$posts  = $wpdb->get_results( $wpdb->prepare( "SELECT ID,post_content FROM {$wpdb->posts} WHERE {$where} AND ID > %d ORDER BY ID ASC LIMIT %d", $cursor, $scan + 1 ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
 		if ( ! $posts ) {
 			$posts = array();
 		}
@@ -548,10 +582,11 @@ final class NTC_Migrator {
 		$instances = 0;
 		$errors    = array();
 		$processed = 0;
+		$attempted = 0;
 		$next      = $cursor;
 		$started   = microtime( true );
 		foreach ( $posts as $p ) {
-			if ( $processed > 0 && microtime( true ) - $started >= self::POST_TIME_BUDGET_SECS ) {
+			if ( $processed >= $scan || $attempted >= $chunk || ( $processed > 0 && microtime( true ) - $started >= self::POST_TIME_BUDGET_SECS ) ) {
 				break;
 			}
 			$original = $p['post_content'];
@@ -582,6 +617,7 @@ final class NTC_Migrator {
 				$new
 			);
 			if ( $new !== $original ) {
+				++$attempted;
 				$wpdb->insert(
 					$wpdb->prefix . 'ntc_backups',
 					array(
@@ -608,12 +644,12 @@ final class NTC_Migrator {
 			$next = max( $next, (int) $p['ID'] );
 			++$processed;
 		}
-		$remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE {$where} AND ID > %d", $next ) ); // phpcs:ignore WordPress.DB.PreparedSQL -- $where is a fixed internal fragment and the table name cannot be prepared.
+		$remaining = count( $posts ) > $processed ? 1 : 0;
 		return array(
-			'posts'     => $updated,
-			'instances' => $instances,
-			'errors'    => $errors,
-			'total'     => $total,
+			'posts'       => $updated,
+			'instances'   => $instances,
+			'errors'      => $errors,
+			'total'       => 0,
 			'processed'   => $processed,
 			'remaining'   => $remaining,
 			'next_cursor' => $next,

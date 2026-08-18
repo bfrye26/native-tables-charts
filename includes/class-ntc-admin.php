@@ -105,28 +105,35 @@ final class NTC_Admin {
 			set_transient( 'ntc_migration_report_' . get_current_user_id(), $this->migrator->dry_run(), 10 * MINUTE_IN_SECONDS );
 			$this->redirect( 'ntc-migration', 'dryrun=1' );}
 		if ( 'migration_run' === $action && current_user_can( 'ntc_migrate' ) ) {
-			$convert  = ! empty( $_POST['convert_content'] );
-			$batch_id = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? '' ) );
-			$uid      = get_current_user_id();
-			$prev     = '' !== $batch_id ? get_transient( 'ntc_migration_progress_' . $uid ) : false;
-			$offset   = absint( $_POST['offset'] ?? ( is_array( $prev ) ? ( $prev['offset'] ?? 0 ) : 0 ) );
-			$cursor   = absint( $_POST['cursor'] ?? ( is_array( $prev ) ? ( $prev['cursor'] ?? 0 ) : 0 ) );
-			$chunk    = NTC_Migrator::POST_BATCH_SIZE;
+			$batch_id    = sanitize_text_field( wp_unslash( $_POST['batch_id'] ?? '' ) );
+			$uid         = get_current_user_id();
+			$prev        = '' !== $batch_id ? get_transient( 'ntc_migration_progress_' . $uid ) : false;
+			$convert     = is_array( $prev ) ? ! empty( $prev['convert'] ) : ! empty( $_POST['convert_content'] );
+			$offset      = absint( $_POST['offset'] ?? ( is_array( $prev ) ? ( $prev['offset'] ?? 0 ) : 0 ) );
+			$cursor      = absint( $_POST['cursor'] ?? ( is_array( $prev ) ? ( $prev['cursor'] ?? 0 ) : 0 ) );
+			$table_cursor = absint( $_POST['table_cursor'] ?? ( is_array( $prev ) ? ( $prev['table_cursor'] ?? 0 ) : 0 ) );
+			$chunk       = NTC_Migrator::POST_BATCH_SIZE;
 			if ( '' !== $batch_id ) {
-				$result = $this->migrator->continue_migration( $batch_id, $cursor, $chunk );
+				$result = $this->migrator->continue_migration( $batch_id, $cursor, $chunk, $table_cursor, $convert );
 			} else {
 				$result = $this->migrator->migrate( $convert, 0, $chunk );
 			}
-			$batch_id      = (string) ( $result['batch_id'] ?? $batch_id );
-			$total         = is_array( $prev ) ? (int) ( $prev['total'] ?? 0 ) : (int) ( $result['posts_total'] ?? 0 );
-			$new_offset    = $offset + (int) ( $result['processed'] ?? 0 );
-			$next_cursor   = (int) ( $result['next_cursor'] ?? $cursor );
-			$done          = ! $convert || empty( $batch_id ) || ( 0 === (int) ( $result['posts_remaining'] ?? 0 ) );
-			$acc_errors    = array_merge( is_array( $prev ) ? (array) ( $prev['errors'] ?? array() ) : array(), (array) ( $result['errors'] ?? array() ) );
-			$acc_posts     = ( is_array( $prev ) ? (int) ( $prev['posts'] ?? 0 ) : 0 ) + (int) ( $result['posts_updated'] ?? 0 );
-			$acc_instances = ( is_array( $prev ) ? (int) ( $prev['instances'] ?? 0 ) : 0 ) + (int) ( $result['instances_converted'] ?? 0 );
+			$batch_id         = (string) ( $result['batch_id'] ?? $batch_id );
+			$total            = is_array( $prev ) ? (int) ( $prev['total'] ?? 0 ) : (int) ( $result['posts_total'] ?? 0 );
+			$new_offset       = $offset + (int) ( $result['processed'] ?? 0 );
+			$next_cursor      = (int) ( $result['next_cursor'] ?? $cursor );
+			$table_total      = is_array( $prev ) && isset( $prev['table_total'] ) ? (int) $prev['table_total'] : (int) ( $result['tables_total'] ?? 0 );
+			$table_offset     = ( is_array( $prev ) ? (int) ( $prev['table_offset'] ?? 0 ) : 0 ) + (int) ( $result['tables_processed'] ?? 0 );
+			$next_table_cursor = (int) ( $result['next_table_cursor'] ?? $table_cursor );
+			$done             = empty( $batch_id ) || ! empty( $result['migration_complete'] );
+			$acc_errors       = array_merge( is_array( $prev ) ? (array) ( $prev['errors'] ?? array() ) : array(), (array) ( $result['errors'] ?? array() ) );
+			$acc_datasets     = ( is_array( $prev ) ? (int) ( $prev['datasets'] ?? 0 ) : 0 ) + (int) ( $result['datasets_created'] ?? 0 );
+			$acc_posts        = ( is_array( $prev ) ? (int) ( $prev['posts'] ?? 0 ) : 0 ) + (int) ( $result['posts_updated'] ?? 0 );
+			$acc_instances    = ( is_array( $prev ) ? (int) ( $prev['instances'] ?? 0 ) : 0 ) + (int) ( $result['instances_converted'] ?? 0 );
 			if ( $done ) {
+				$result['success']             = empty( $acc_errors );
 				$result['errors']              = $acc_errors;
+				$result['datasets_created']    = $acc_datasets;
 				$result['posts_updated']       = $acc_posts;
 				$result['instances_converted'] = $acc_instances;
 				delete_transient( 'ntc_migration_progress_' . $uid );
@@ -141,8 +148,13 @@ final class NTC_Admin {
 					'batch_id'  => $batch_id,
 					'offset'    => $new_offset,
 					'cursor'    => $next_cursor,
+					'table_offset' => $table_offset,
+					'table_cursor' => $next_table_cursor,
+					'table_total' => $table_total,
 					'total'     => $total,
+					'phase'     => (string) ( $result['phase'] ?? 'tables' ),
 					'errors'    => $acc_errors,
+					'datasets'  => $acc_datasets,
 					'posts'     => $acc_posts,
 					'instances' => $acc_instances,
 				),
@@ -534,7 +546,7 @@ endif;
 
 	public function migration_page(): void {
 		$migration_progress = get_transient( 'ntc_migration_progress_' . get_current_user_id() );
-		$detect             = $this->migrator->detect( ! is_array( $migration_progress ) || ! empty( $migration_progress['done'] ) );
+		$detect             = $this->migrator->detect( ! is_array( $migration_progress ) || ! empty( $migration_progress['done'] ), ! is_array( $migration_progress ) || ! empty( $migration_progress['done'] ) );
 		$report             = get_transient( 'ntc_migration_report_' . get_current_user_id() );
 		$result             = get_transient( 'ntc_migration_result_' . get_current_user_id() );
 		$rollback_progress  = get_transient( 'ntc_rollback_progress_' . get_current_user_id() );
@@ -548,7 +560,7 @@ endif;
 		<?php
 		if ( $detect['available'] ) :
 			?>
-			<div class="ntc-cards"><section><h2><?php esc_html_e( '1. Dry Run', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'Analyze the existing League Table database before changing anything.', 'native-tables-charts' ); ?></p><form method="post"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_dry_run"><button class="button button-secondary"><?php esc_html_e( 'Run Dry-Run Report', 'native-tables-charts' ); ?></button></form></section><section><h2><?php esc_html_e( '2. Migrate', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'Create reusable Native Tables datasets and views. Existing League Table database tables are never deleted.', 'native-tables-charts' ); ?></p><form method="post" id="ntc-migrate-form" onsubmit="return this.elements.offset.value!=0||confirm('<?php echo esc_js( __( 'Start the migration now? A backup of every changed post will be kept for rollback.', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_run"><label><input type="checkbox" name="convert_content" value="1" checked> <?php esc_html_e( 'Replace [lt] shortcodes and dalt/table blocks in post content', 'native-tables-charts' ); ?></label><input type="hidden" name="batch_id" value="<?php echo esc_attr( $migration_progress['batch_id'] ?? '' ); ?>"><input type="hidden" name="offset" value="<?php echo esc_attr( $migration_progress['offset'] ?? '0' ); ?>"><input type="hidden" name="cursor" value="<?php echo esc_attr( $migration_progress['cursor'] ?? '0' ); ?>"><p><button class="button button-primary"><?php esc_html_e( 'Run Migration', 'native-tables-charts' ); ?></button></p></form></section></div><?php endif; ?>
+			<div class="ntc-cards"><section><h2><?php esc_html_e( '1. Dry Run', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'Analyze the existing League Table database before changing anything.', 'native-tables-charts' ); ?></p><form method="post"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_dry_run"><button class="button button-secondary"><?php esc_html_e( 'Run Dry-Run Report', 'native-tables-charts' ); ?></button></form></section><section><h2><?php esc_html_e( '2. Migrate', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'Create reusable Native Tables datasets and views. Existing League Table database tables are never deleted.', 'native-tables-charts' ); ?></p><form method="post" id="ntc-migrate-form" onsubmit="return this.elements.batch_id.value!==''||confirm('<?php echo esc_js( __( 'Start the migration now? A backup of every changed post will be kept for rollback.', 'native-tables-charts' ) ); ?>')"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_run"><label><input type="checkbox" name="convert_content" value="1" <?php checked( ! is_array( $migration_progress ) || ! empty( $migration_progress['convert'] ) ); ?>> <?php esc_html_e( 'Replace [lt] shortcodes and dalt/table blocks in post content', 'native-tables-charts' ); ?></label><input type="hidden" name="batch_id" value="<?php echo esc_attr( $migration_progress['batch_id'] ?? '' ); ?>"><input type="hidden" name="offset" value="<?php echo esc_attr( $migration_progress['offset'] ?? '0' ); ?>"><input type="hidden" name="cursor" value="<?php echo esc_attr( $migration_progress['cursor'] ?? '0' ); ?>"><input type="hidden" name="table_cursor" value="<?php echo esc_attr( $migration_progress['table_cursor'] ?? '0' ); ?>"><p><button class="button button-primary"><?php esc_html_e( 'Run Migration', 'native-tables-charts' ); ?></button></p></form></section></div><?php endif; ?>
 		<div class="ntc-cards"><section><h2><?php esc_html_e( 'Import League Table XML', 'native-tables-charts' ); ?></h2><p><?php esc_html_e( 'If you exported tables from League Table on another site, import its XML backup directly into Native Tables & Charts. This creates reusable datasets and synced table views without requiring the old plugin to be active.', 'native-tables-charts' ); ?></p><form method="post" enctype="multipart/form-data"><?php wp_nonce_field( 'ntc_admin_action' ); ?><input type="hidden" name="ntc_action" value="migration_xml_import"><input type="file" name="league_xml" accept=".xml,text/xml,application/xml" required><p><button class="button"><?php esc_html_e( 'Import XML', 'native-tables-charts' ); ?></button></p></form></section></div>
 		<?php
 		if ( is_array( $report ) ) :
@@ -582,8 +594,13 @@ endif;
 		endif;
 		?>
 		<?php if ( is_array( $migration_progress ) && empty( $migration_progress['done'] ) ) : ?>
-			<?php /* translators: 1: number of posts processed so far, 2: total posts to process. */ ?>
-		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d posts processed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['offset'], (int) $migration_progress['total'] ); ?></p></div>
+			<?php if ( 'tables' === ( $migration_progress['phase'] ?? 'tables' ) ) : ?>
+				<?php /* translators: 1: number of legacy tables scanned so far, 2: total legacy tables. */ ?>
+		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %1$d of %2$d legacy tables scanned. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['table_offset'], (int) $migration_progress['table_total'] ); ?></p></div>
+			<?php else : ?>
+				<?php /* translators: %d: number of posts processed so far. */ ?>
+		<div class="notice notice-info"><p><?php printf( esc_html__( 'Migration in progress — %d posts processed. Keep this tab open.', 'native-tables-charts' ), (int) $migration_progress['offset'] ); ?></p></div>
+			<?php endif; ?>
 		<script>(function(){setTimeout(function(){var f=document.getElementById('ntc-migrate-form');if(f){(f.requestSubmit||f.submit).call(f);}},600);})();</script>
 		<?php endif; ?>
 		<?php if ( is_array( $rollback_progress ) && empty( $rollback_progress['done'] ) ) : ?>

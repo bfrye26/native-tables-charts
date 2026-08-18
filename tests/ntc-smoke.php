@@ -363,15 +363,37 @@ $assert( 200 === substr_count( $GLOBALS['wpdb']->queries[2], '(%d,%d,%s,%s)' ), 
 require_once dirname( __DIR__ ) . '/includes/class-ntc-migrator.php';
 $migrator                   = new NTC_Migrator( $repo );
 $assert( 20 === NTC_Migrator::POST_BATCH_SIZE, 'migration post batches stay below proxy timeout thresholds' );
+$assert( 100 === NTC_Migrator::POST_SCAN_BATCH_SIZE, 'migration scans a bounded post ID window' );
 $call_m                     = function ( string $m, ...$a ) use ( $migrator ) {
 	$mm = ( new ReflectionClass( 'NTC_Migrator' ) )->getMethod( $m );
 	$mm->setAccessible( true );
 	return $mm->invokeArgs( $migrator, $a );
 };
-$GLOBALS['wpdb']->queries   = array();
-$GLOBALS['fake_post_count'] = 550;
-$GLOBALS['fake_post_remaining'] = 530;
-$GLOBALS['fake_posts']      = array();
+$GLOBALS['fake_dataset']                = array( 'id' => 42, 'columns_json' => '[]' );
+$GLOBALS['fake_options']                = array( 'ntc_migration_map' => array( 1 => 42, 2 => 42 ) );
+$GLOBALS['fake_legacy_tables']          = array( array( 'id' => 1 ), array( 'id' => 2 ) );
+$GLOBALS['fake_legacy_table_remaining'] = 0;
+$table_phase = $call_m( 'run_migration_batch', 'batch-tables', true, 0, 0, 20, 2 );
+$assert( 'tables' === $table_phase['phase'] && empty( $table_phase['migration_complete'] ), 'migration keeps table import in a separate request phase' );
+$assert( 2 === $table_phase['tables_processed'], 'migration table phase reports its bounded cursor progress' );
+$assert( 0 === $table_phase['processed'] && 0 === $table_phase['posts_updated'], 'table phase does not update post content in the same request' );
+unset( $GLOBALS['fake_dataset'], $GLOBALS['fake_options'], $GLOBALS['fake_legacy_tables'], $GLOBALS['fake_legacy_table_remaining'] );
+$GLOBALS['wpdb']->queries                 = array();
+$GLOBALS['fake_dataset']                  = array( 'id' => 42, 'columns_json' => '[]' );
+$GLOBALS['fake_legacy_table_remaining']   = 5;
+$GLOBALS['fake_legacy_tables']            = array();
+$legacy_map                               = array();
+for ( $i = 1; $i <= 25; $i++ ) {
+	$GLOBALS['fake_legacy_tables'][] = array( 'id' => $i );
+	$legacy_map[ $i ]                = 42;
+}
+$table_batch = $call_m( 'migrate_tables', $legacy_map, 0, 20 );
+$assert( 20 === $table_batch['processed'] && 20 === $table_batch['next_cursor'], 'legacy table import uses a bounded ID-cursor page' );
+$assert( 5 === $table_batch['remaining'], 'legacy table import reports remaining tables' );
+$assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'id > 0 ORDER BY id ASC LIMIT 20' ), 'legacy table import pages without OFFSET' );
+unset( $GLOBALS['fake_dataset'], $GLOBALS['fake_legacy_tables'], $GLOBALS['fake_legacy_table_remaining'] );
+$GLOBALS['wpdb']->queries = array();
+$GLOBALS['fake_posts']    = array();
 for ( $i = 0; $i < 200; $i++ ) {
 	$GLOBALS['fake_posts'][] = array(
 		'ID'           => $i + 1,
@@ -379,13 +401,24 @@ for ( $i = 0; $i < 200; $i++ ) {
 	);
 }
 $r = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 0, 20 );
-$assert( 20 === $r['processed'] && 550 === $r['total'], 'convert_posts processes a bounded post page and reports total' );
-$assert( 20 === $r['next_cursor'] && 530 === $r['remaining'], 'convert_posts returns a resumable ID cursor and remaining count' );
-$assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'ID > 0 ORDER BY ID ASC LIMIT 20' ), 'convert_posts pages by ID cursor without OFFSET' );
+$assert( 20 === $r['processed'] && 0 === $r['total'], 'convert_posts processes a bounded post page without a full-table count' );
+$assert( 20 === $r['next_cursor'] && 1 === $r['remaining'], 'convert_posts returns a resumable ID cursor and more-work flag' );
+$assert( false !== strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'ID > 0 ORDER BY ID ASC LIMIT 101' ), 'convert_posts pages by ID cursor without OFFSET' );
 $assert( false === strpos( implode( ' ', $GLOBALS['wpdb']->queries ), ' OFFSET ' ), 'convert_posts never offsets into a shrinking result set' );
-$GLOBALS['fake_post_remaining'] = 510;
+$assert( false === strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'COUNT(*) FROM wp_posts' ), 'convert_posts avoids repeated wildcard count scans' );
 $r2 = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 20, 20 );
-$assert( 20 === $r2['processed'] && 40 === $r2['next_cursor'] && 510 === $r2['remaining'], 'convert_posts resumes after the last processed post ID' );
+$assert( 20 === $r2['processed'] && 40 === $r2['next_cursor'] && 1 === $r2['remaining'], 'convert_posts resumes after the last processed post ID' );
+$GLOBALS['wpdb']->queries = array();
+$GLOBALS['fake_posts']    = array();
+for ( $i = 0; $i < 150; $i++ ) {
+	$GLOBALS['fake_posts'][] = array(
+		'ID'           => $i + 1,
+		'post_content' => 'No legacy table content',
+	);
+}
+$r3 = $call_m( 'convert_posts', array( 1 => 5 ), 'batch-1', 0, 20 );
+$assert( 100 === $r3['processed'] && 100 === $r3['next_cursor'] && 1 === $r3['remaining'], 'convert_posts advances through a fixed sparse-content scan window' );
+$assert( false === strpos( implode( ' ', $GLOBALS['wpdb']->queries ), 'post_content LIKE' ), 'convert_posts avoids wildcard scans across the posts table' );
 $GLOBALS['fake_backup_count'] = 450;
 $GLOBALS['fake_backups']      = array();
 for ( $i = 0; $i < 200; $i++ ) {
