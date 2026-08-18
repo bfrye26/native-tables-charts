@@ -399,6 +399,37 @@ $line_series = $call(
 	false
 );
 $assert( false !== strpos( $line_series, 'ntc-svg-line ntc-series-0' ), 'chart_line polyline carries series class' );
+$assert( false === NTC_Renderer::chart_defaults()['enableBrush'], 'chart_defaults includes enableBrush false' );
+$line_brush = $call(
+	'chart_line',
+	array( array( 'A', 5 ), array( 'B', 10 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'xColumn'      => null,
+		'enableBrush'  => true,
+	),
+	false,
+	false
+);
+$assert( false !== strpos( $line_brush, 'data-pad-l="70"' ) && false !== strpos( $line_brush, 'data-w="1000"' ) && false !== strpos( $line_brush, 'data-h="440"' ), 'chart_line brush svg carries pad and size data attributes' );
+$assert( false !== strpos( $line_brush, 'data-series="0"' ) && false !== strpos( $line_brush, 'data-points="[[0,5],[1,10]]"' ), 'chart_line brush polyline carries series and raw point data' );
+$assert( false !== strpos( $line_brush, 'data-x="0"' ) && false !== strpos( $line_brush, 'data-v="5"' ), 'chart_line brush circles carry data-x and data-v' );
+$scatter_brush = $call(
+	'chart_line',
+	array( array( 'A', 5 ), array( 'B', 10 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'xColumn'      => null,
+		'enableBrush'  => true,
+	),
+	true,
+	false
+);
+$assert( false === strpos( $scatter_brush, 'data-pad-l' ), 'chart_line scatter ignores enableBrush' );
 $assert( array() === NTC_Renderer::chart_defaults()['annotations'], 'chart_defaults includes annotations' );
 $line_annotations = $call(
 	'chart_line',

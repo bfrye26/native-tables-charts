@@ -189,6 +189,7 @@ final class NTC_Renderer {
 			'enableExport'            => false,
 			'enableTooltips'          => false,
 			'legendToggles'           => false,
+			'enableBrush'             => false,
 			'enableSchema'            => false,
 			'schemaType'              => 'off',
 			'ratingMin'               => 0,
@@ -1750,7 +1751,11 @@ final class NTC_Renderer {
 		$py     = function ( $v ) use ( $min, $max, $pad_t, $ph ) {
 			return $pad_t + $ph - ( ( $v - $min ) / ( $max - $min ) ) * $ph;
 		};
-		$out    = '<svg class="ntc-svg-chart" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="' . esc_attr( ! empty( $c['title'] ) ? $c['title'] : ( $scatter ? __( 'Scatter chart', 'native-tables-charts' ) : __( 'Line chart', 'native-tables-charts' ) ) ) . '">';
+		$out    = '<svg class="ntc-svg-chart" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="' . esc_attr( ! empty( $c['title'] ) ? $c['title'] : ( $scatter ? __( 'Scatter chart', 'native-tables-charts' ) : __( 'Line chart', 'native-tables-charts' ) ) ) . '"';
+		if ( ! empty( $c['enableBrush'] ) && ! $scatter && ! $area ) {
+			$out .= ' data-pad-l="' . $pad_l . '" data-pad-r="' . $pad_r . '" data-pad-t="' . $pad_t . '" data-pad-b="' . $pad_b . '" data-w="' . $w . '" data-h="' . $h . '"';
+		}
+		$out .= '>';
 		for ( $g = 0; $g <= 4; $g++ ) {
 			$y    = $pad_t + $ph * ( $g / 4 );
 			$out .= '<line x1="' . $pad_l . '" y1="' . $y . '" x2="' . ( $w - $pad_r ) . '" y2="' . $y . '" class="ntc-svg-grid"/>';
@@ -1764,19 +1769,24 @@ final class NTC_Renderer {
 			foreach ( $rows as $i => $r ) {
 				$val   = NTC_Formulas::numeric( $r[ $v ] ?? 0 );
 				$xv    = null !== $xcol ? (float) $this->sort_value( $r[ $xcol ] ?? '', $columns[ $xcol ]['type'] ?? 'auto', $columns[ $xcol ]['format'] ?? '', 'us' ) : (float) $i;
-				$pts[] = array( $px( $xv ), $py( $val ), $r[ $l ] ?? '', $val );
+				$pts[] = array( $px( $xv ), $py( $val ), $r[ $l ] ?? '', $val, $xv );
 			}
 			$poly       = implode( ' ', array_map( fn( $p ) => round( $p[0], 1 ) . ',' . round( $p[1], 1 ), $pts ) );
 			$line_class = 'ntc-svg-line ntc-series-' . ( $si % 6 ) . ( $area ? ' ntc-svg-area' : '' );
 			if ( ! $scatter ) {
-				$out .= '<polyline points="' . $poly . '" class="' . $line_class . '" style="stroke:' . $this->series_color( $pts[0][3], $v, $c, $colors[ $si % count( $colors ) ] ) . '" fill="none"/>';
+				if ( ! empty( $c['enableBrush'] ) && ! $area ) {
+					$out .= '<polyline data-series="' . $si . '" data-points="' . esc_attr( wp_json_encode( array_map( fn( $p ) => array( $p[4], $p[3] ), $pts ) ) ) . '" points="' . $poly . '" class="' . $line_class . '" style="stroke:' . $colors[ $si % count( $colors ) ] . '" fill="none"/>';
+				} else {
+					$out .= '<polyline points="' . $poly . '" class="' . $line_class . '" style="stroke:' . $this->series_color( $pts[0][3], $v, $c, $colors[ $si % count( $colors ) ] ) . '" fill="none"/>';
+				}
 			}
 			if ( $area && count( $pts ) > 1 ) {
 				$out .= '<polygon points="' . round( $pts[0][0], 1 ) . ',' . ( $pad_t + $ph ) . ' ' . $poly . ' ' . round( $pts[ count( $pts ) - 1 ][0], 1 ) . ',' . ( $pad_t + $ph ) . '" class="ntc-svg-area-fill ntc-series-' . ( $si % 6 ) . '" style="fill:' . $colors[ $si % count( $colors ) ] . ';opacity:.18"/>';
 			}
 			foreach ( $pts as $p ) {
 				$tip  = ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $p[2], $p[3], $columns[ $v ] ?? array(), $c ) . '"' : '';
-				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point ntc-series-' . ( $si % 6 ) . '" style="fill:' . $this->series_color( $p[3], $v, $c, $colors[ $si % count( $colors ) ] ) . '"' . $tip . '><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
+				$data = ( ! empty( $c['enableBrush'] ) && ! $scatter && ! $area ) ? ' data-x="' . $p[4] . '" data-v="' . $p[3] . '"' : '';
+				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point ntc-series-' . ( $si % 6 ) . '" style="fill:' . $this->series_color( $p[3], $v, $c, $colors[ $si % count( $colors ) ] ) . '"' . $tip . $data . '><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
 			}
 		}
 		foreach ( $rows as $i => $r ) {

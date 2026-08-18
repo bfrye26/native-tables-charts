@@ -115,6 +115,36 @@ Array.prototype.forEach.call(toggles,function(btn){
 		fig.classList.toggle('ntc-hide-series-'+s,on);
 	});
 });
+var svg=fig.querySelector('svg.ntc-svg-chart');
+if(svg&&svg.getAttribute('data-pad-l')){
+	var padL=Number(svg.dataset.padL),padR=Number(svg.dataset.padR),padT=Number(svg.dataset.padT),padB=Number(svg.dataset.padB);
+	var plotW=Number(svg.dataset.w)-padL-padR;
+	var lines=Array.prototype.slice.call(svg.querySelectorAll('polyline[data-points]'));
+	var dataAll=lines.map(function(l){return JSON.parse(l.dataset.points);});
+	var xAll=dataAll.length?dataAll[0].map(function(p){return p[0];}):[];
+	var xMin=Math.min.apply(null,xAll),xSpan=Math.max.apply(null,xAll)-xMin;
+	var px=function(x){return padL+plotW*((x-xMin)/(xSpan||1));};
+	var wrap=document.createElement('div');wrap.className='ntc-brush';
+	var h1=document.createElement('span'),h2=document.createElement('span');
+	h1.className='ntc-brush-handle';h2.className='ntc-brush-handle';wrap.appendChild(h1);wrap.appendChild(h2);
+	svg.parentNode.insertBefore(wrap,svg.nextSibling);
+	var lo=0,hi=1;
+	var apply=function(){
+		wrap.style.left=(px(xMin+xSpan*lo))+'px';wrap.style.width=Math.max(4,(px(xMin+xSpan*hi)-px(xMin+xSpan*lo)))+'px';
+		lines.forEach(function(line,si){
+			var pts=dataAll[si].filter(function(p,i){var t=((p[0]-xMin)/(xSpan||1));return t>=lo&&t<=hi;});
+			if(!pts.length)return;
+			var minV=Infinity,maxV=-Infinity;pts.forEach(function(p){if(p[1]<minV)minV=p[1];if(p[1]>maxV)maxV=p[1];});
+			var spanV=(maxV-minV)||1;
+			line.setAttribute('points',pts.map(function(p){
+				return (padL+plotW*((p[0]-xMin)/(xSpan||1)))+','+(padT+(Number(svg.dataset.h)-padT-padB)-((p[1]-minV)/spanV)*(Number(svg.dataset.h)-padT-padB));
+			}).join(' '));
+		});
+	};
+	var drag=function(h,set){return function(ev){ev.preventDefault();var startX=ev.clientX||ev.touches[0].clientX;var move=function(e){var dx=e.clientX-startX;var d=dx/plotW;if(set==='lo'){lo=Math.max(0,Math.min(hi-0.02,lo+d));}else{hi=Math.min(1,Math.max(lo+0.02,hi+d));}startX=e.clientX;apply();};var up=function(){document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);};document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);};};
+	h1.addEventListener('mousedown',drag(h1,'lo'));h2.addEventListener('mousedown',drag(h2,'hi'));
+	apply();
+}
 }
 document.addEventListener('DOMContentLoaded',function(){
 	document.querySelectorAll('.ntc-table').forEach(ntcBindTable);

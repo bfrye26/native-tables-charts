@@ -93,3 +93,5 @@
 
 
 .ntc-heatmap-wrap{overflow-x:auto}.ntc-heatmap{border-collapse:separate;border-spacing:2px;width:100%}.ntc-heatmap th{font-size:var(--ntc-legend-size);color:var(--ntc-muted);font-weight:600;text-align:left;padding:4px 6px}.ntc-heatmap td{font-size:var(--ntc-value-size);text-align:center;padding:8px 6px;border-radius:3px;font-variant-numeric:tabular-nums;color:#111827;min-width:52px}
+
+.ntc-brush{position:relative;height:0;margin:2px 0}.ntc-brush-handle{position:absolute;top:-10px;width:12px;height:12px;border-radius:50%;background:var(--ntc-chart-bg);border:2px solid var(--ntc-highlight);cursor:ew-resize;transform:translateX(-50%);z-index:2}.ntc-brush-handle:last-child{left:100%}
