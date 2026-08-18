@@ -902,6 +902,33 @@ $heatmap_chart = $call(
 	)
 );
 $assert( false !== strpos( $heatmap_chart, 'ntc-heatmap' ), 'render_chart dispatches heatmap type' );
+$area_chart = $call(
+	'render_chart',
+	array(
+		'columns' => array(
+			array(
+				'id'    => 'c1',
+				'label' => 'Item',
+				'type'  => 'text',
+				'unit'  => '',
+			),
+			array(
+				'id'    => 'c2',
+				'label' => 'Value',
+				'type'  => 'number',
+				'unit'  => '',
+			),
+		),
+		'rows'    => array( array( 'A', 10 ), array( 'B', 20 ) ),
+		'config'  => array(
+			'chartType'    => 'area',
+			'labelColumn'  => 0,
+			'valueColumns' => array( 1 ),
+			'enableExport' => true,
+		),
+	)
+);
+$assert( false !== strpos( $area_chart, 'data-format="png"' ), 'area chart type includes PNG export button' );
 $GLOBALS['fake_wp_posts'] = array(
 	new WP_Post( 1, 'Post A' ),
 	new WP_Post( 2, 'Post B' ),

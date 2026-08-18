@@ -1276,7 +1276,7 @@ final class NTC_Renderer {
 				$out .= '<div class="ntc-chart-sort-label">' . esc_html( $config['sortLabel'] ) . '</div>';
 			}$out .= '</div>';}
 		$value_cols = array_slice( array_map( 'absint', (array) ( $config['valueColumns'] ?? array() ) ), 0, 6 );
-		if ( count( $value_cols ) > 1 && in_array( $type, array( 'grouped-bar', 'stacked-bar', 'line', 'scatter' ), true ) ) {
+		if ( count( $value_cols ) > 1 && in_array( $type, array( 'grouped-bar', 'stacked-bar', 'line', 'scatter', 'area' ), true ) ) {
 			$out .= '<div class="ntc-series-legend">';
 			foreach ( $value_cols as $si => $v ) {
 				if ( ! empty( $config['legendToggles'] ) ) {
@@ -1362,7 +1362,7 @@ final class NTC_Renderer {
 		} elseif ( 'screenreader' === $data_mode ) {
 			$out .= '<div class="ntc-chart-data-sr ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';}
 		if ( ! empty( $config['enableExport'] ) ) {
-			$png  = in_array( $type, array( 'donut', 'line', 'scatter' ), true );
+			$png  = in_array( $type, array( 'donut', 'line', 'scatter', 'area' ), true );
 			$out .= '<div class="ntc-chart-tools"><button type="button" class="ntc-export-btn" data-format="csv">' . esc_html__( 'Download CSV', 'native-tables-charts' ) . '</button>' . ( $png ? '<button type="button" class="ntc-export-btn" data-format="png">' . esc_html__( 'Download PNG', 'native-tables-charts' ) . '</button>' : '' ) . '</div>';
 			if ( 'disabled' === $data_mode ) {
 				$out .= '<div class="ntc-chart-export-data ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';}
