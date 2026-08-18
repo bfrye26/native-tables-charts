@@ -183,6 +183,9 @@ final class NTC_Renderer {
 			'enableExport'            => false,
 			'enableTooltips'          => false,
 			'enableSchema'            => false,
+			'schemaType'              => 'off',
+			'ratingMin'               => 0,
+			'ratingMax'               => 10,
 			'themeMode'               => 'fixed',
 			'darkBackground'          => '#0f131a',
 			'darkTextColor'           => '#e6e9ee',
@@ -497,8 +500,60 @@ final class NTC_Renderer {
 		return compact( 'mode', 'columns', 'rows', 'config', 'cell_meta', 'dataset_id', 'view_id', 'dataset_updated_at', 'dataset_name' );
 	}
 
-	private function schema_json( array $data, array $config, array $columns ): string {
-		if ( empty( $config['enableSchema'] ) ) {
+	private function schema_json( array $data, array $config, array $columns, array $rows = array() ): string {
+		$schema_type = (string) ( $config['schemaType'] ?? 'off' );
+		if ( 'off' === $schema_type && ! empty( $config['enableSchema'] ) ) {
+			$schema_type = 'dataset'; }
+		if ( 'off' === $schema_type ) {
+			return ''; }
+		if ( 'review' === $schema_type ) {
+			$name = (string) ( $config['title'] ?? '' );
+			if ( '' === $name ) {
+				return ''; }
+			$v     = absint( $config['valueColumns'][0] ?? 1 );
+			$focus = (array) ( $config['highlightValues'] ?? array() );
+			$row   = array();
+			if ( $focus && $rows ) {
+				$l = absint( $config['labelColumn'] );
+				foreach ( $rows as $r ) {
+					if ( in_array( (string) ( $r[ $l ] ?? '' ), array_map( 'strval', $focus ), true ) ) {
+						$row = $r;
+						break;
+					}
+				}
+			}
+			if ( ! $row && $rows ) {
+				$row = $rows[0]; }
+			$rating  = $row ? (float) NTC_Formulas::numeric( $row[ $v ] ?? 0 ) : 0.0;
+			$payload = array(
+				'@context' => 'https://schema.org',
+				'@graph'   => array(
+					array(
+						'@type'           => 'Product',
+						'name'            => esc_html( $name ),
+						'review'          => array(
+							'@type'        => 'Review',
+							'reviewBody'   => esc_html( (string) ( $config['subtitle'] ?? '' ) ),
+							'reviewRating' => array(
+								'@type'       => 'Rating',
+								'ratingValue' => $rating,
+								'bestRating'  => (float) max( 1, (float) ( $config['ratingMax'] ?? 10 ) ),
+								'worstRating' => (float) ( $config['ratingMin'] ?? 0 ),
+							),
+						),
+						'aggregateRating' => array(
+							'@type'       => 'AggregateRating',
+							'ratingValue' => $rating,
+							'bestRating'  => (float) max( 1, (float) ( $config['ratingMax'] ?? 10 ) ),
+							'worstRating' => (float) ( $config['ratingMin'] ?? 0 ),
+							'ratingCount' => 1,
+						),
+					),
+				),
+			);
+			return '<script type="application/ld+json">' . wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '</script>';
+		}
+		if ( 'dataset' !== $schema_type ) {
 			return ''; }
 		$name = (string) ( $config['title'] ?? '' );
 		if ( '' === $name ) {
@@ -1275,7 +1330,7 @@ final class NTC_Renderer {
 				$out .= '<div class="ntc-chart-export-data ntc-sr-only">' . $this->accessible_chart_table( $chart_rows, $columns, $config ) . '</div>';}
 			wp_enqueue_script( 'ntc-frontend' );
 		}
-		$out .= '</figure>' . $this->schema_json( $data, $config, $columns );
+		$out .= '</figure>' . $this->schema_json( $data, $config, $columns, $chart_rows );
 		return $out;
 	}
 

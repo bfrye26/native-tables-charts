@@ -96,6 +96,35 @@ $xss_schema = $call(
 );
 $assert( false === strpos( $xss_schema, '<script>alert' ), 'schema_json escapes column label script tag' );
 $assert( false !== strpos( $xss_schema, '&lt;' ), 'schema_json emits escaped entities for label' );
+$review_schema = $call(
+	'schema_json',
+	array( 'dataset_updated_at' => '2026-08-17 10:00:00' ),
+	array(
+		'schemaType'   => 'review',
+		'title'        => 'Game X',
+		'subtitle'     => 'A great game',
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+	),
+	array(),
+	array( array( 'Game X', '8.5' ) )
+);
+$assert( false !== strpos( $review_schema, '"@type":"Review"' ), 'review schema emits Review type' );
+$assert( false !== strpos( $review_schema, '"ratingValue":8.5' ), 'review schema emits ratingValue 8.5' );
+$xss_review = $call(
+	'schema_json',
+	array(),
+	array(
+		'schemaType'   => 'review',
+		'title'        => '</script><script>alert(1)</script>',
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+	),
+	array(),
+	array( array( 'X', 5 ) )
+);
+$assert( false === strpos( $xss_review, '<script>alert' ), 'review schema escapes malicious title script tag' );
+$assert( '' === $call( 'schema_json', array(), array( 'schemaType' => 'off' ), array() ), 'schemaType off returns empty' );
 $updated = $call( 'updated_date_html', array( 'showUpdatedDate' => true ), array( 'dataset_updated_at' => '2026-08-17 10:00:00' ) );
 $assert( false !== strpos( $updated, 'Last updated:' ), 'updated date renders Last updated line' );
 $assert( false !== strpos( $updated, '2026-08-17 10:00:00' ), 'updated date includes raw datetime' );
