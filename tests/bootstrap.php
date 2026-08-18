@@ -234,6 +234,10 @@ $GLOBALS['wpdb'] = new class() {
 		}
 		if ( false !== strpos( $q, 'wp_posts' ) && isset( $GLOBALS['fake_posts'] ) ) {
 			$posts = $GLOBALS['fake_posts'];
+			if ( preg_match( '/ID IN \(([^)]+)\)/', $q, $id_match ) ) {
+				$ids   = array_map( 'intval', explode( ',', $id_match[1] ) );
+				$posts = array_values( array_filter( $posts, static fn( $post ) => in_array( (int) $post['ID'], $ids, true ) ) );
+			}
 			if ( preg_match( '/ID > (\d+)/', $q, $cursor_match ) ) {
 				$cursor = (int) $cursor_match[1];
 				$posts  = array_values( array_filter( $posts, static fn( $post ) => (int) $post['ID'] > $cursor ) );
