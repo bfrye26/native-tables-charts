@@ -77,3 +77,4 @@
 .ntc-svg-area{stroke-width:3}.ntc-svg-area-fill{pointer-events:none}
 
 .ntc-hbar-track{position:relative}.ntc-ref-line{position:absolute;top:-6px;bottom:-6px;border-left:1px dashed #ef4444;pointer-events:none}.ntc-ref-line i{position:absolute;top:-16px;right:0;font-style:normal;font-size:10px;color:inherit;white-space:nowrap}.ntc-svg-ref{stroke-dasharray:5 4;stroke-width:1.5}.ntc-svg-ref-label{fill:var(--ntc-muted);font-size:11px}
+.ntc-radar-wrap{max-width:520px;margin:0 auto}.ntc-radar{display:block;width:100%;height:auto}.ntc-radar-ring{fill:none;stroke:var(--ntc-grid);stroke-width:1}.ntc-radar-spoke{stroke:var(--ntc-grid);stroke-width:1}.ntc-radar-label{fill:var(--ntc-muted);font-size:12px}.ntc-radar-series{stroke-width:2}.ntc-chart-empty-note{padding:16px;color:var(--ntc-muted);text-align:center}

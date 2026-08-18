@@ -309,5 +309,36 @@ for ( $i = 0; $i < 200; $i++ ) {
 }
 $rb = $call_m( 'rollback', 'batch-1', 0, 200 );
 $assert( 450 === $rb['total'] && 250 === $rb['remaining'] && 200 === $rb['processed'], 'rollback pages backups and reports remaining' );
+$radar = $call(
+	'chart_radar',
+	array(
+		array( '<b>Speed</b>', 80, 60 ),
+		array( 'Power', 90, 70 ),
+		array( 'Agility', 70, 90 ),
+		array( 'Stamina', 85, 80 ),
+	),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1, 2 ),
+		'radarMax'     => 0,
+		'title'        => 'Stats',
+	)
+);
+$assert( 4 === substr_count( $radar, 'ntc-radar-ring' ), 'radar renders 4 rings' );
+$assert( 4 === substr_count( $radar, 'ntc-radar-spoke' ), 'radar renders one spoke per row' );
+$assert( 2 === substr_count( $radar, 'ntc-radar-series' ), 'radar renders one series polygon per value column' );
+$assert( false !== strpos( $radar, '&lt;b&gt;Speed&lt;/b&gt;' ) && false === strpos( $radar, '<b>Speed</b>' ), 'radar escapes axis labels' );
+$radar_two_rows = $call(
+	'chart_radar',
+	array( array( 'A', 1 ), array( 'B', 2 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+	)
+);
+$assert( false !== strpos( $radar_two_rows, 'ntc-chart-empty-note' ), 'radar shows empty note under 3 rows' );
+$assert( 0 === NTC_Renderer::chart_defaults()['radarMax'], 'chart_defaults includes radarMax 0' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

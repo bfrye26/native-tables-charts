@@ -138,6 +138,7 @@ final class NTC_Renderer {
 			'highlightValues'         => array(),
 			'allowMultipleHighlights' => false,
 			'referenceLines'          => array(),
+			'radarMax'                => 0,
 			'unit'                    => '',
 			'decimals'                => 'auto',
 			'showValues'              => true,
@@ -1230,6 +1231,9 @@ final class NTC_Renderer {
 			case 'donut':
 				$out .= $this->chart_donut( $chart_rows, $columns, $config );
 				break;
+			case 'radar':
+				$out .= $this->chart_radar( $chart_rows, $columns, $config );
+				break;
 			case 'horizontal-bar':
 			default:
 				$out .= $this->chart_horizontal( $chart_rows, $columns, $config );
@@ -1621,6 +1625,60 @@ final class NTC_Renderer {
 			$legend_color = $hl ? 'var(--ntc-highlight)' : $colors[ $i % count( $colors ) ];
 			$out         .= '<span class="' . ( $hl ? 'is-highlight' : '' ) . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( (string) ( $row[ $l ] ?? '' ), $row[ $v ] ?? 0, $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><i style="background:' . $legend_color . '"></i>' . esc_html( $legend ) . '</span>';
 		}$out .= '</div></div>';
+		return $out;
+	}
+
+	private function chart_radar( array $rows, array $columns, array $c ): string {
+		$l      = absint( $c['labelColumn'] );
+		$series = array_slice( array_map( 'absint', (array) $c['valueColumns'] ), 0, 6 );
+		if ( ! $series ) {
+			$series = array( 1 );
+		}
+		$n = count( $rows );
+		if ( $n < 3 ) {
+			return '<div class="ntc-chart-empty-note">' . esc_html__( 'Radar charts need at least three rows (axes).', 'native-tables-charts' ) . '</div>';
+		}
+		$max = (float) ( $c['radarMax'] ?? 0 );
+		if ( $max <= 0 ) {
+			foreach ( $series as $v ) {
+				$max = max( $max, $this->max_for( $rows, $v ) );
+			}
+		}
+		$max    = $max ? $max : 1;
+		$cx     = 220;
+		$cy     = 210;
+		$r      = 150;
+		$colors = array( 'var(--ntc-primary)', 'var(--ntc-secondary)', '#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444' );
+		$pt     = function ( $i, $val ) use ( $n, $cx, $cy, $r, $max ) {
+			$ang = -pi() / 2 + 2 * pi() * ( $i / $n );
+			$rad = $r * max( 0, min( 1, (float) $val / $max ) );
+			return array( $cx + $rad * cos( $ang ), $cy + $rad * sin( $ang ) );
+		};
+		$out    = '<div class="ntc-radar-wrap"><svg class="ntc-radar" viewBox="0 0 440 420" role="img" aria-label="' . esc_attr( ! empty( $c['title'] ) ? $c['title'] : __( 'Radar chart', 'native-tables-charts' ) ) . '">';
+		for ( $ring = 1; $ring <= 4; $ring++ ) {
+			$pts = array();
+			for ( $i = 0; $i < $n; $i++ ) {
+				$p     = $pt( $i, $max * $ring / 4 );
+				$pts[] = round( $p[0], 1 ) . ',' . round( $p[1], 1 );
+			}
+			$out .= '<polygon points="' . esc_attr( implode( ' ', $pts ) ) . '" class="ntc-radar-ring"/>';
+		}
+		for ( $i = 0; $i < $n; $i++ ) {
+			$p      = $pt( $i, $max );
+			$out   .= '<line x1="' . $cx . '" y1="' . $cy . '" x2="' . round( $p[0], 1 ) . '" y2="' . round( $p[1], 1 ) . '" class="ntc-radar-spoke"/>';
+			$lp     = $pt( $i, $max * 1.12 );
+			$anchor = abs( $lp[0] - $cx ) < 8 ? 'middle' : ( $lp[0] > $cx ? 'start' : 'end' );
+			$out   .= '<text x="' . round( $lp[0], 1 ) . '" y="' . round( $lp[1] + 4, 1 ) . '" class="ntc-radar-label" text-anchor="' . $anchor . '">' . esc_html( $this->truncate( (string) ( $rows[ $i ][ $l ] ?? '' ), 22 ) ) . '</text>';
+		}
+		foreach ( $series as $si => $v ) {
+			$pts = array();
+			for ( $i = 0; $i < $n; $i++ ) {
+				$p     = $pt( $i, NTC_Formulas::numeric( $rows[ $i ][ $v ] ?? 0 ) );
+				$pts[] = round( $p[0], 1 ) . ',' . round( $p[1], 1 );
+			}
+			$out .= '<polygon points="' . esc_attr( implode( ' ', $pts ) ) . '" class="ntc-radar-series ntc-series-' . ( $si % 6 ) . '" style="stroke:' . $colors[ $si % count( $colors ) ] . ';fill:' . $colors[ $si % count( $colors ) ] . ';fill-opacity:.15"/>';
+		}
+		$out .= '</svg></div>';
 		return $out;
 	}
 
