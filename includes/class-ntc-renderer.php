@@ -139,6 +139,8 @@ final class NTC_Renderer {
 			'allowMultipleHighlights' => false,
 			'referenceLines'          => array(),
 			'radarMax'                => 0,
+			'gaugeMin'                => 0,
+			'gaugeMax'                => 100,
 			'unit'                    => '',
 			'decimals'                => 'auto',
 			'showValues'              => true,
@@ -1234,6 +1236,9 @@ final class NTC_Renderer {
 			case 'radar':
 				$out .= $this->chart_radar( $chart_rows, $columns, $config );
 				break;
+			case 'gauge':
+				$out .= $this->chart_gauge( $chart_rows, $columns, $config );
+				break;
 			case 'horizontal-bar':
 			default:
 				$out .= $this->chart_horizontal( $chart_rows, $columns, $config );
@@ -1312,7 +1317,7 @@ final class NTC_Renderer {
 	}
 
 	private function is_highlight( $label, array $c ): bool {
-		return in_array( (string) $label, array_map( 'strval', (array) $c['highlightValues'] ), true );}
+		return in_array( (string) $label, array_map( 'strval', (array) ( $c['highlightValues'] ?? array() ) ), true );}
 	private function format_value( $v, array $c, array $col = array() ): string {
 		$n   = NTC_Formulas::numeric( $v );
 		$dec = $c['decimals'] ?? 'auto';
@@ -1680,6 +1685,44 @@ final class NTC_Renderer {
 		}
 		$out .= '</svg></div>';
 		return $out;
+	}
+
+	private function chart_gauge( array $rows, array $columns, array $c ): string {
+		$l   = absint( $c['labelColumn'] );
+		$v   = absint( $c['valueColumns'][0] ?? 1 );
+		$val = NTC_Formulas::numeric( $rows[0][ $v ] ?? 0 );
+		$min = (float) ( $c['gaugeMin'] ?? 0 );
+		$max = (float) ( $c['gaugeMax'] ?? 100 );
+		if ( $max <= $min ) {
+			$max = $min + 100;
+		}
+		$frac = max( 0.0, min( 1.0, ( $val - $min ) / ( $max - $min ) ) );
+		$cx   = 160;
+		$cy   = 150;
+		$r    = 110;
+		$ang0 = -pi() * 0.75;
+		$ang1 = pi() * 0.75;
+		$end  = $ang0 + ( $ang1 - $ang0 ) * $frac;
+		$arc  = function ( $a0, $a1 ) use ( $cx, $cy, $r ) {
+			$x0    = $cx + $r * cos( $a0 );
+			$y0    = $cy + $r * sin( $a0 );
+			$x1    = $cx + $r * cos( $a1 );
+			$y1    = $cy + $r * sin( $a1 );
+			$large = abs( $a1 - $a0 ) > pi() ? 1 : 0;
+			return 'M ' . $x0 . ' ' . $y0 . ' A ' . $r . ' ' . $r . ' 0 ' . $large . ' 1 ' . $x1 . ' ' . $y1;
+		};
+		$out  = '<div class="ntc-gauge-wrap"><svg class="ntc-gauge" viewBox="0 0 320 210" role="img" aria-label="' . esc_attr( ! empty( $c['title'] ) ? $c['title'] : __( 'Gauge chart', 'native-tables-charts' ) ) . '">';
+		$out .= '<path d="' . esc_attr( $arc( $ang0, $ang1 ) ) . '" class="ntc-gauge-bg"/>';
+		foreach ( array_slice( (array) ( $c['referenceLines'] ?? array() ), 0, 5 ) as $rl ) {
+			$tv   = (float) ( $rl['value'] ?? 0 );
+			$tf   = max( 0.0, min( 1.0, ( $tv - $min ) / ( $max - $min ) ) );
+			$out .= '<path d="' . esc_attr( $arc( $ang0, $ang0 + ( $ang1 - $ang0 ) * $tf ) ) . '" class="ntc-gauge-band" style="stroke:' . esc_attr( self::safe_css_value( $rl['color'] ?? '#ef4444' ) ) . '"/>';
+		}
+		$highlight = $this->is_highlight( (string) ( $rows[0][ $l ] ?? '' ), $c );
+		$out      .= '<path d="' . esc_attr( $arc( $ang0, $end ) ) . '" class="ntc-gauge-value" style="stroke:' . ( $highlight ? 'var(--ntc-highlight)' : 'var(--ntc-primary)' ) . '"/>';
+		$out      .= '<text x="' . $cx . '" y="' . ( $cy - 6 ) . '" class="ntc-gauge-number">' . esc_html( $this->format_value( $val, $c, $columns[ $v ] ?? array() ) ) . '</text>';
+		$out      .= '<text x="' . $cx . '" y="' . ( $cy + 22 ) . '" class="ntc-gauge-label">' . esc_html( $this->truncate( (string) ( $rows[0][ $l ] ?? '' ), 24 ) ) . '</text>';
+		return $out . '</svg></div>';
 	}
 
 	private function accessible_chart_table( array $rows, array $columns, array $c ): string {

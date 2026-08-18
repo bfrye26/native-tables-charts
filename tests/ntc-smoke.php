@@ -340,5 +340,77 @@ $radar_two_rows = $call(
 );
 $assert( false !== strpos( $radar_two_rows, 'ntc-chart-empty-note' ), 'radar shows empty note under 3 rows' );
 $assert( 0 === NTC_Renderer::chart_defaults()['radarMax'], 'chart_defaults includes radarMax 0' );
+$assert( 0 === NTC_Renderer::chart_defaults()['gaugeMin'] && 100 === NTC_Renderer::chart_defaults()['gaugeMax'], 'chart_defaults includes gaugeMin 0 and gaugeMax 100' );
+$gauge = $call(
+	'chart_gauge',
+	array( array( 'Score', 50 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+		'gaugeMin'     => 0,
+		'gaugeMax'     => 100,
+		'title'        => 'Score gauge',
+	)
+);
+$assert( false !== strpos( $gauge, 'ntc-gauge-value' ) && false !== strpos( $gauge, '>50</text>' ), 'gauge renders value arc and 50' );
+$assert( false !== strpos( $gauge, 'Score' ) && false !== strpos( $gauge, 'Score gauge' ), 'gauge renders label and aria title' );
+$gauge_band = $call(
+	'chart_gauge',
+	array( array( 'Score', 50 ) ),
+	array(),
+	array(
+		'labelColumn'    => 0,
+		'valueColumns'   => array( 1 ),
+		'referenceLines' => array(
+			array(
+				'value' => 75,
+				'color' => '#ef4444',
+			),
+		),
+	)
+);
+$assert( false !== strpos( $gauge_band, 'ntc-gauge-band' ) && false !== strpos( $gauge_band, '#ef4444' ), 'gauge renders reference band' );
+$gauge_at_max   = $call(
+	'chart_gauge',
+	array( array( 'Score', 100 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+	)
+);
+$gauge_over_max = $call(
+	'chart_gauge',
+	array( array( 'Score', 150 ) ),
+	array(),
+	array(
+		'labelColumn'  => 0,
+		'valueColumns' => array( 1 ),
+	)
+);
+preg_match( '/d="([^"]+)" class="ntc-gauge-value"/', $gauge_at_max, $m_max );
+preg_match( '/d="([^"]+)" class="ntc-gauge-value"/', $gauge_over_max, $m_over );
+$assert( isset( $m_max[1], $m_over[1] ) && $m_max[1] === $m_over[1], 'gauge value clamps at max' );
+$gauge_chart = $call(
+	'render_chart',
+	array(
+		'columns' => array(
+			array(
+				'id'    => 'c1',
+				'label' => 'Score',
+				'type'  => 'number',
+				'unit'  => '',
+			),
+		),
+		'rows'    => array( array( 'Score', 50 ) ),
+		'config'  => array(
+			'chartType'    => 'gauge',
+			'labelColumn'  => 0,
+			'valueColumns' => array( 1 ),
+		),
+	)
+);
+$assert( false !== strpos( $gauge_chart, 'ntc-gauge' ), 'render_chart dispatches gauge type' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );
