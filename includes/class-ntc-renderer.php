@@ -130,6 +130,7 @@ final class NTC_Renderer {
 			'sortLabel'               => '',
 			'labelColumn'             => 0,
 			'valueColumns'            => array( 1 ),
+			'xColumn'                 => null,
 			'sortColumn'              => 1,
 			'sortDirection'           => 'desc',
 			'highlightValues'         => array(),
@@ -1215,10 +1216,13 @@ final class NTC_Renderer {
 				$out .= $this->chart_grouped( $chart_rows, $columns, $config, true );
 				break;
 			case 'line':
-				$out .= $this->chart_line( $chart_rows, $columns, $config, false );
+				$out .= $this->chart_line( $chart_rows, $columns, $config, false, false );
 				break;
 			case 'scatter':
-				$out .= $this->chart_line( $chart_rows, $columns, $config, true );
+				$out .= $this->chart_line( $chart_rows, $columns, $config, true, false );
+				break;
+			case 'area':
+				$out .= $this->chart_line( $chart_rows, $columns, $config, false, true );
 				break;
 			case 'donut':
 				$out .= $this->chart_donut( $chart_rows, $columns, $config );
@@ -1419,21 +1423,39 @@ final class NTC_Renderer {
 		}return $out . '</div>';
 	}
 
-	private function chart_line( array $rows, array $columns, array $c, bool $scatter ): string {
+	private function chart_line( array $rows, array $columns, array $c, bool $scatter, bool $area = false ): string {
 		$l      = absint( $c['labelColumn'] );
 		$series = array_slice( array_map( 'absint', (array) $c['valueColumns'] ), 0, 6 );
 		if ( ! $series ) {
 			$series = array( 1 );
+		}
+		$xcol = null;
+		if ( null !== $c['xColumn'] && '' !== $c['xColumn'] ) {
+			$xcol = absint( $c['xColumn'] );
 		}
 		$all = array();
 		foreach ( $series as $v ) {
 			foreach ( $rows as $r ) {
 				$all[] = NTC_Formulas::numeric( $r[ $v ] ?? 0 );
 			}
-		}$min = min( $all ? $all : array( 0 ) );
-		$max  = max( $all ? $all : array( 1 ) );
+		}
+		$min = min( $all ? $all : array( 0 ) );
+		$max = max( $all ? $all : array( 1 ) );
 		if ( $max === $min ) {
 			$max = $min + 1;
+		}
+		$xmin = 0.0;
+		$xmax = max( 1, count( $rows ) - 1 );
+		if ( null !== $xcol ) {
+			$xvals = array();
+			foreach ( $rows as $r ) {
+				$xvals[] = (float) $this->sort_value( $r[ $xcol ] ?? '', $columns[ $xcol ]['type'] ?? 'auto', $columns[ $xcol ]['format'] ?? '', 'us' );
+			}
+			$xmin = min( $xvals );
+			$xmax = max( $xvals );
+			if ( $xmin === $xmax ) {
+				$xmax = $xmin + 1;
+			}
 		}
 		$w      = 1000;
 		$h      = 440;
@@ -1443,30 +1465,75 @@ final class NTC_Renderer {
 		$pad_b  = 90;
 		$pw     = $w - $pad_l - $pad_r;
 		$ph     = $h - $pad_t - $pad_b;
-		$n      = max( 1, count( $rows ) - 1 );
 		$colors = array( 'var(--ntc-primary)', 'var(--ntc-secondary)', '#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444' );
+		$px     = function ( $v ) use ( $xmin, $xmax, $pad_l, $pw ) {
+			return $pad_l + $pw * ( ( $v - $xmin ) / ( $xmax - $xmin ) );
+		};
+		$py     = function ( $v ) use ( $min, $max, $pad_t, $ph ) {
+			return $pad_t + $ph - ( ( $v - $min ) / ( $max - $min ) ) * $ph;
+		};
 		$out    = '<svg class="ntc-svg-chart" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="' . esc_attr( ! empty( $c['title'] ) ? $c['title'] : ( $scatter ? __( 'Scatter chart', 'native-tables-charts' ) : __( 'Line chart', 'native-tables-charts' ) ) ) . '">';
-		for ( $g = 0;$g <= 4;$g++ ) {
+		for ( $g = 0; $g <= 4; $g++ ) {
 			$y    = $pad_t + $ph * ( $g / 4 );
-			$out .= '<line x1="' . $pad_l . '" y1="' . $y . '" x2="' . ( $w - $pad_r ) . '" y2="' . $y . '" class="ntc-svg-grid"/>';}
+			$out .= '<line x1="' . $pad_l . '" y1="' . $y . '" x2="' . ( $w - $pad_r ) . '" y2="' . $y . '" class="ntc-svg-grid"/>';
+		}
+		$ticks = null !== $xcol ? $this->time_ticks( $xmin, $xmax ) : array();
+		foreach ( $ticks as $tk ) {
+			$out .= '<line x1="' . round( $px( $tk ), 1 ) . '" y1="' . $pad_t . '" x2="' . round( $px( $tk ), 1 ) . '" y2="' . ( $h - $pad_b ) . '" class="ntc-svg-grid"/>';
+		}
 		foreach ( $series as $si => $v ) {
 			$pts = array();
 			foreach ( $rows as $i => $r ) {
 				$val   = NTC_Formulas::numeric( $r[ $v ] ?? 0 );
-				$x     = $pad_l + ( $pw * ( $i / $n ) );
-				$y     = $pad_t + $ph - ( ( $val - $min ) / ( $max - $min ) ) * $ph;
-				$pts[] = array( $x, $y, $r[ $l ] ?? '', $val );}
-			$poly = implode( ' ', array_map( fn( $p )=>round( $p[0], 1 ) . ',' . round( $p[1], 1 ), $pts ) );
+				$xv    = null !== $xcol ? (float) $this->sort_value( $r[ $xcol ] ?? '', $columns[ $xcol ]['type'] ?? 'auto', $columns[ $xcol ]['format'] ?? '', 'us' ) : (float) $i;
+				$pts[] = array( $px( $xv ), $py( $val ), $r[ $l ] ?? '', $val );
+			}
+			$poly       = implode( ' ', array_map( fn( $p ) => round( $p[0], 1 ) . ',' . round( $p[1], 1 ), $pts ) );
+			$line_class = $area ? 'ntc-svg-line ntc-svg-area' : 'ntc-svg-line';
 			if ( ! $scatter ) {
-				$out .= '<polyline points="' . $poly . '" class="ntc-svg-line" style="stroke:' . $colors[ $si % count( $colors ) ] . '" fill="none"/>';
+				$out .= '<polyline points="' . $poly . '" class="' . $line_class . '" style="stroke:' . $colors[ $si % count( $colors ) ] . '" fill="none"/>';
+			}
+			if ( $area && count( $pts ) > 1 ) {
+				$out .= '<polygon points="' . round( $pts[0][0], 1 ) . ',' . ( $pad_t + $ph ) . ' ' . $poly . ' ' . round( $pts[ count( $pts ) - 1 ][0], 1 ) . ',' . ( $pad_t + $ph ) . '" class="ntc-svg-area-fill" style="fill:' . $colors[ $si % count( $colors ) ] . ';opacity:.18"/>';
 			}
 			foreach ( $pts as $p ) {
-				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point" style="fill:' . $colors[ $si % count( $colors ) ] . '"' . ( ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2], $p[3], $columns[ $v ] ?? array(), $c ) . '"' : '' ) . '><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';}
+				$tip  = ! empty( $c['enableTooltips'] ) ? ' data-tip="' . $this->tip_text( $p[2], $p[3], $columns[ $v ] ?? array(), $c ) . '"' : '';
+				$out .= '<circle cx="' . $p[0] . '" cy="' . $p[1] . '" r="6" class="ntc-svg-point" style="fill:' . $colors[ $si % count( $colors ) ] . '"' . $tip . '><title>' . esc_html( ( $columns[ $v ]['label'] ?? '' ) . ', ' . $p[2] . ': ' . $this->format_value( $p[3], $c, $columns[ $v ] ?? array() ) ) . '</title></circle>';
+			}
 		}
 		foreach ( $rows as $i => $r ) {
-			$x    = $pad_l + ( $pw * ( $i / $n ) );
-			$out .= '<text x="' . $x . '" y="' . ( $h - 50 ) . '" class="ntc-svg-label" text-anchor="middle">' . esc_html( $this->truncate( (string) ( $r[ $l ] ?? '' ), 18 ) ) . '</text>';}
+			$xv = null !== $xcol ? (float) $this->sort_value( $r[ $xcol ] ?? '', $columns[ $xcol ]['type'] ?? 'auto', $columns[ $xcol ]['format'] ?? '', 'us' ) : (float) $i;
+			if ( null === $xcol || 0 === $i || count( $rows ) - 1 === $i ) {
+				$out .= '<text x="' . round( $px( $xv ), 1 ) . '" y="' . ( $h - 50 ) . '" class="ntc-svg-label" text-anchor="middle">' . esc_html( $this->truncate( (string) ( $r[ $l ] ?? '' ), 18 ) ) . '</text>';
+			}
+		}
+		if ( null !== $xcol ) {
+			foreach ( $ticks as $tk ) {
+				$out .= '<text x="' . round( $px( $tk ), 1 ) . '" y="' . ( $h - $pad_b + 18 ) . '" class="ntc-svg-label" text-anchor="middle">' . esc_html( $this->tick_label( (int) $tk, $xmax - $xmin ) ) . '</text>';
+			}
+		}
 		return $out . '</svg>';
+	}
+
+	private function time_ticks( float $min, float $max ): array {
+		$ticks = array();
+		for ( $i = 0; $i <= 4; $i++ ) {
+			$ticks[] = $min + ( $max - $min ) * ( $i / 4 );
+		}
+		return $ticks;
+	}
+
+	private function tick_label( int $ts, float $span ): string {
+		if ( $span > 2 * YEAR_IN_SECONDS ) {
+			return gmdate( 'Y', $ts );
+		}
+		if ( $span > 60 * DAY_IN_SECONDS ) {
+			return gmdate( 'M Y', $ts );
+		}
+		if ( $span > 3 * DAY_IN_SECONDS ) {
+			return gmdate( 'M j', $ts );
+		}
+		return gmdate( 'M j, H:i', $ts );
 	}
 
 	private function chart_donut( array $rows, array $columns, array $c ): string {

@@ -102,6 +102,9 @@ $assert( false !== strpos( $updated, '2026-08-17 10:00:00' ), 'updated date incl
 $assert( 'redbackground:url(x)' === $call( 'safe_css_value', 'red;background:url(x)' ), 'safe_css_value strips ; {}<>' );
 $assert( '' === $call( 'css_length', '100%;background:red' ), 'css_length rejects injection' );
 $assert( false !== strpos( $call( 'tip_text', 'GPU', '100', array( 'unit' => 'fps' ), array() ), 'GPU: 100 fps' ), 'tip_text formats value with unit' );
+$ticks = $call( 'time_ticks', 0.0, 100.0 );
+$assert( 5 === count( $ticks ) && array( 0.0, 25.0, 50.0, 75.0, 100.0 ) === array_map( 'floatval', $ticks ), 'time_ticks returns 5 evenly spaced values' );
+$assert( 'Jan 15' === $call( 'tick_label', gmmktime( 0, 0, 0, 1, 15, 2026 ), 20 * DAY_IN_SECONDS ), 'tick_label formats month-day for 20-day span' );
 $heat_cfg = array(
 	'autoColorRules' => array(
 		array(

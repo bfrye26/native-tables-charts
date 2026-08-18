@@ -73,3 +73,5 @@
 
 .ntc-tooltip{display:none;position:absolute;z-index:10;max-width:260px;padding:5px 9px;border-radius:4px;background:#111827;color:#f5f7fa;font-size:12px;line-height:1.35;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .ntc-chart{position:relative}
+
+.ntc-svg-area{stroke-width:3}.ntc-svg-area-fill{pointer-events:none}

@@ -5,6 +5,8 @@ define( 'MB_IN_BYTES', 1048576 );
 define( 'ARRAY_A', 'ARRAY_A' );
 define( 'HOUR_IN_SECONDS', 3600 );
 define( 'MINUTE_IN_SECONDS', 60 );
+define( 'YEAR_IN_SECONDS', 31536000 );
+define( 'DAY_IN_SECONDS', 86400 );
 function __( $s, $d = null ) {
 	return $s; }
 function esc_html__( $s, $d = null ) {
