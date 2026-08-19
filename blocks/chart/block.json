@@ -2,7 +2,7 @@
   "$schema": "https://schemas.wp.org/trunk/block.json",
   "apiVersion": 3,
   "name": "ntc/chart",
-  "version": "3.0.9",
+  "version": "3.1.0",
   "title": "Native Data Chart",
   "category": "ntc-data",
   "icon": "chart-bar",

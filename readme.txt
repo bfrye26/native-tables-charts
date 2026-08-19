@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 3.0.9
+Stable tag: 3.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -184,6 +184,11 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 3.1.0 =
+* Added block transforms so the standard Gutenberg Table block and Flexible Table Block can be converted to Native Data Table directly in the editor.
+* Preserves headers, captions, fixed layout, stacked-mobile and sticky-header behaviour, merged cells, cell alignment, colours, font styling, links and inline HTML during conversion.
+* Converts numeric columns to native numeric types so sorting works immediately.
 
 = 3.0.9 =
 * Added progressive large-table rendering so only one page of rows is mounted in the browser at a time.
