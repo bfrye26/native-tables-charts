@@ -950,9 +950,28 @@ function DataEditor({attributes,setAttributes,type,isSelected}){
 function TableEdit(props){return h(DataEditor,Object.assign({},props,{type:'table'}));}
 function ChartEdit(props){return h(DataEditor,Object.assign({},props,{type:'chart'}));}
 
+function decodeEntities(s){return String(s).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&nbsp;/g,' ');}
+function hasHtmlTag(s){return /<[a-z][\s\S]*>/i.test(String(s));}
+function plainText(s){return decodeEntities(String(s).replace(/<br\s*\/?>/gi,' ').replace(/<\/(p|div|li|h[1-6]|tr)>/gi,' ').replace(/<[^>]+>/g,''));}
+function parseInlineStyles(styles,meta){var out=meta||{};(String(styles||'')).split(';').forEach(function(part){var kv=part.split(':').map(function(x){return x.trim();});if(kv.length!==2)return;var k=kv[0].toLowerCase(),v=kv[1];if(k==='text-align'&&['left','center','right'].indexOf(v)>=0)out.alignment=v;else if(k==='color')out.textColor=v;else if(k==='background-color')out.backgroundColor=v;else if(k==='font-weight')out.fontWeight=v;else if(k==='font-style')out.fontStyle=v;});return out;}
+function convertTableBlock(attrs){
+ attrs=attrs||{};var head=Array.isArray(attrs.head)?attrs.head:[];var body=Array.isArray(attrs.body)?attrs.body:[];var foot=Array.isArray(attrs.foot)?attrs.foot:[];
+ var sections=[].concat(head,body,foot),cells=function(row){return (row&&Array.isArray(row.cells)?row.cells:[]).map(function(c){return c||{};});};
+ var headerRow=head.length?cells(head[0]):null;
+ var rows=[],cellMeta={};
+ sections.forEach(function(row,si){if(head.length&&si===0)return;var out=[];cells(row).forEach(function(cell,ci){var text=plainText(cell.content||'');out.push(text);var meta={};if(cell.styles)parseInlineStyles(cell.styles,meta);if(cell.align&&['left','center','right'].indexOf(cell.align)>=0)meta.alignment=cell.align;if(hasHtmlTag(cell.content))meta.html=String(cell.content);var span=parseInt(cell.colSpan||cell.colspan,10);if(span>1)meta.colspan=span;var rspan=parseInt(cell.rowSpan||cell.rowspan,10);if(rspan>1)meta.rowspan=rspan;if(Object.keys(meta).length)cellMeta[(rows.length)+':'+ci]=meta;});rows.push(out);});
+ var colCount=headerRow?headerRow.length:0;rows.forEach(function(r){colCount=Math.max(colCount,r.length);});
+ var columns=[];for(var c=0;c<colCount;c++){var label='Column '+(c+1),allNumeric=true,hasValue=false;if(headerRow&&headerRow[c]){label=plainText(headerRow[c].content||'');var hm={};if(headerRow[c].styles)parseInlineStyles(headerRow[c].styles,hm);if(headerRow[c].align&&['left','center','right'].indexOf(headerRow[c].align)>=0)hm.alignment=headerRow[c].align;if(hasHtmlTag(headerRow[c].content))hm.html=String(headerRow[c].content);var hspan=parseInt(headerRow[c].colSpan||headerRow[c].colspan,10);if(hspan>1)hm.colspan=hspan;var hrspan=parseInt(headerRow[c].rowSpan||headerRow[c].rowspan,10);if(hrspan>1)hm.rowspan=hrspan;if(Object.keys(hm).length)cellMeta['header:'+c]=hm;}
+ rows.forEach(function(r){var v=r[c];if(v===''||v==null)return;hasValue=true;if(!isNumericCell(v))allNumeric=false;});columns.push({id:'c'+(c+1),label:label,type:hasValue&&allNumeric?'number':'text',unit:'',format:''});}
+ var config={preset:'editorial',showHeader:!!headerRow,responsiveMode:attrs.isStackedOnMobile?'stack':'scroll',tableLayout:attrs.hasFixedLayout?'fixed':'auto',stickyHeader:attrs.sticky==='header'};
+ if(attrs.caption){config.showCaption=true;config.caption=String(attrs.caption);config.captionSide=attrs.captionSide==='top'?'top':'bottom';}
+ var widthMode='content',align='';if(attrs.align==='wide')widthMode='wide';if(attrs.align==='full')widthMode='full';if(attrs.align==='left'||attrs.align==='right')align=attrs.align;
+ return {columns:columns,rows:rows,config:config,cellMeta:cellMeta,widthMode:widthMode,align:align};
+}
+
 registerBlockType('ntc/table',{
  apiVersion:3,attributes:tableAttributes,supports:{anchor:true,html:false,spacing:{margin:true}},title:__('Native Data Table','native-tables-charts'),description:__('Responsive sortable tables with reusable datasets.','native-tables-charts'),icon:'editor-table',category:'ntc-data',keywords:[__('table','native-tables-charts'),__('benchmark','native-tables-charts')],edit:TableEdit,save:()=>null,
- transforms:{to:[{type:'block',blocks:['ntc/chart'],transform:a=>createBlock('ntc/chart',{widthMode:a.widthMode,align:a.align,mode:a.mode,datasetId:a.datasetId,columns:a.columns,rows:a.rows,config:Object.assign({},CFG.chartDefaults||{},{chartType:'horizontal-bar',title:'',labelColumn:0,valueColumns:[Math.min(1,(a.columns||[]).length-1)],sortColumn:Math.min(1,(a.columns||[]).length-1),preset:'benchmark-dark'})})}]}
+ transforms:{from:[{type:'block',blocks:['core/table','flexible-table-block/table'],transform:a=>createBlock('ntc/table',Object.assign({},convertTableBlock(a),{mode:'inline',datasetId:0,viewId:0}))}],to:[{type:'block',blocks:['ntc/chart'],transform:a=>createBlock('ntc/chart',{widthMode:a.widthMode,align:a.align,mode:a.mode,datasetId:a.datasetId,columns:a.columns,rows:a.rows,config:Object.assign({},CFG.chartDefaults||{},{chartType:'horizontal-bar',title:'',labelColumn:0,valueColumns:[Math.min(1,(a.columns||[]).length-1)],sortColumn:Math.min(1,(a.columns||[]).length-1),preset:'benchmark-dark'})})}]}
 });
 registerBlockType('ntc/chart',{
  apiVersion:3,attributes:chartAttributes,supports:{anchor:true,html:false,spacing:{margin:true}},title:__('Native Data Chart','native-tables-charts'),description:__('Responsive charts rendered inside WordPress without an external service.','native-tables-charts'),icon:'chart-bar',category:'ntc-data',keywords:[__('chart','native-tables-charts'),__('benchmark','native-tables-charts')],edit:ChartEdit,save:()=>null,
@@ -970,5 +989,5 @@ if(registerBlockVariation){
  registerBlockVariation('ntc/chart',{name:'dual-metric-benchmark',title:__('Dual-Metric Benchmark Chart','native-tables-charts'),description:__('Two independently scaled benchmark panels, ideal for multi-core/single-core data.','native-tables-charts'),icon:'columns',scope:['inserter'],attributes:{columns:[{id:'product',label:'Product',type:'text',unit:''},{id:'metric1',label:'Metric One',type:'number',unit:''},{id:'metric2',label:'Metric Two',type:'number',unit:''}],rows:[['Product A','100','75'],['Product B','90','85'],['Product C','80','95']],config:{chartType:'dual-metric',title:'Benchmark',subtitle:'Metric One / Metric Two',direction:'higher',labelColumn:0,valueColumns:[1,2],sortColumn:1,sortDirection:'desc',preset:'benchmark-dark'}}});
  registerBlockVariation('ntc/chart',{name:'grouped-comparison',title:__('Grouped Comparison Chart','native-tables-charts'),description:__('Compare several numeric series for each item.','native-tables-charts'),icon:'chart-bar',scope:['inserter'],attributes:{columns:[{id:'product',label:'Product',type:'text',unit:''},{id:'series1',label:'Series One',type:'number',unit:''},{id:'series2',label:'Series Two',type:'number',unit:''}],rows:[['Product A','100','80'],['Product B','90','88']],config:{chartType:'grouped-bar',title:'Comparison',direction:'higher',labelColumn:0,valueColumns:[1,2],sortColumn:1,sortDirection:'desc',preset:'comparison'}}});
 }
-window.NTC_BLOCK_EDITOR_TEST={gridKeyTarget,fetchReusableData};
+window.NTC_BLOCK_EDITOR_TEST={gridKeyTarget,fetchReusableData,convertTableBlock};
 })(window.wp);
