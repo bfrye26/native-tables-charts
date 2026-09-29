@@ -3,7 +3,7 @@ Contributors: cgm
 Tags: gutenberg, tables, charts, data, responsive, benchmark
 Requires at least: 6.6
 Requires PHP: 8.1
-Stable tag: 3.1.0
+Stable tag: 3.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -184,6 +184,13 @@ Version 1.0 limits datasets to 10,000 rows and 40 columns. The Gutenberg data gr
 Not by default. Tables & Charts > Settings contains an explicit option to delete plugin data on uninstall. Keep it disabled on production unless you intentionally want all plugin data removed.
 
 == Changelog ==
+
+= 3.2.0 =
+* Added sub-heading rows so tables can be split into named sections for spec sheets and other structured layouts.
+* Added two heading displays: a full-width banner row and a side-label column that spans its section, plus optional heading background and text colours.
+* Added optional visitor expand/collapse toggles per section, with a start-collapsed setting.
+* Section tables keep groups together by suspending sorting and pagination, and position numbering skips heading rows.
+* Added a ready-made Spec Sheet block pattern with seven collapsible side-label sections.
 
 = 3.1.0 =
 * Added block transforms so the standard Gutenberg Table block and Flexible Table Block can be converted to Native Data Table directly in the editor.
