@@ -3,6 +3,14 @@
 function isNumericValue(v){return /^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(String(v??'').trim());}
 function cmp(a,b){const av=String(a??''),bv=String(b??'');if(isNumericValue(av)&&isNumericValue(bv))return Number(av)-Number(bv);return av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}
 document.addEventListener('click',function(e){
+ const tog=e.target.closest('.ntc-section-toggle');
+ if(tog){
+  const togTable=tog.closest('.ntc-table');if(!togTable)return;
+  const sec=tog.dataset.section;const wasExpanded=tog.getAttribute('aria-expanded')==='true';
+  tog.setAttribute('aria-expanded',wasExpanded?'false':'true');
+  togTable.querySelectorAll('tr[data-section="'+sec+'"]').forEach(function(r){r.classList.toggle('is-section-hidden',wasExpanded);});
+  return;
+ }
  const btn=e.target.closest('.ntc-sort');if(!btn)return;const table=btn.closest('.ntc-table');if(!table)return;const col=Number(btn.dataset.column||0);const tbody=table.tBodies[0];if(!tbody)return;
  const current=btn.getAttribute('aria-sort')||'none';const next=current==='ascending'?'descending':'ascending';
  table.querySelectorAll('.ntc-sort').forEach(function(b){b.setAttribute('aria-sort','none');const th=b.closest('th');if(th)th.setAttribute('aria-sort','none');});
@@ -55,7 +63,7 @@ function ntcBindTable(table){
 	};
 	if(search){search.addEventListener('input',function(){
 		var q=search.value.toLowerCase();
-		filtered=q?allRows.filter(function(r){return r.textContent.toLowerCase().indexOf(q)>=0;}):allRows;
+		filtered=q?allRows.filter(function(r){return r.classList.contains('ntc-row-heading')||r.textContent.toLowerCase().indexOf(q)>=0;}):allRows;
 		page=1;
 		if(pager&&size){renderPage();}
 		else{

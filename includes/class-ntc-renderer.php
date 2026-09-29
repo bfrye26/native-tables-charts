@@ -119,6 +119,12 @@ final class NTC_Renderer {
 			'enableSchema'          => false,
 			'schemaType'            => 'off',
 			'showUpdatedDate'       => false,
+			'rowHeadings'           => array(),
+			'rowHeadingStyle'       => 'banner',
+			'sectionsCollapsible'   => false,
+			'sectionsStartCollapsed' => false,
+			'rowHeadingBackground'  => '',
+			'rowHeadingColor'       => '',
 		), self::schema_defaults() );
 	}
 
@@ -915,6 +921,13 @@ final class NTC_Renderer {
 		}
 		if ( empty( $config['enableCellProperties'] ) ) {
 			$cell_meta = array();}
+		$headings = self::sanitize_row_headings( $config['rowHeadings'] ?? array(), count( $rows ) );
+		$has_headings = ! empty( $headings );
+		if ( $has_headings ) {
+			// Section tables are positional: re-sorting or paging would scatter groups, so both are suspended.
+			$config['enableSorting']    = false;
+			$config['enablePagination'] = false;
+		}
 		$rows       = NTC_Formulas::apply( $rows, $columns, $cell_meta, (int) $config['averageDecimals'], (string) $config['averageRound'] );
 		$rows       = $this->sort_rows( $rows, $config, $columns );
 		$heat       = $this->heatmap_stats( $rows, $config, $columns );
@@ -958,7 +971,7 @@ final class NTC_Renderer {
 		}if ( (int) $config['containerWidth'] > 0 ) {
 			$scroll_styles[] = 'max-width:' . absint( $config['containerWidth'] ) . 'px';
 		}$out .= '<div class="ntc-table-scroll"' . ( $scroll_styles ? ' style="' . esc_attr( implode( ';', $scroll_styles ) ) . '"' : '' ) . '>';
-		$progressive = ( ! empty( $config['enablePagination'] ) || count( $rows ) > 500 ) && ! $this->table_has_spans( $cell_meta );
+		$progressive = ( ! empty( $config['enablePagination'] ) || count( $rows ) > 500 ) && ! $this->table_has_spans( $cell_meta ) && ! $has_headings;
 		$page_size   = ! empty( $config['enablePagination'] ) ? max( 1, min( 500, absint( $config['rowsPerPage'] ?? 10 ) ) ) : 100;
 		$records     = array();
 		if ( $progressive ) {
@@ -985,6 +998,8 @@ final class NTC_Renderer {
 			$out .= '<thead><tr>';
 			if ( ! empty( $config['showPosition'] ) && 'left' === $config['positionSide'] ) {
 				$out .= '<th scope="col" class="ntc-position-head">' . esc_html( $config['positionLabel'] ) . '</th>';}
+			if ( $has_headings && 'side' === self::row_heading_style( $config ) ) {
+				$out .= '<th scope="col" class="ntc-row-heading-head" aria-hidden="true"></th>';}
 			$header_skip = array();
 			foreach ( $columns as $ci => $col ) {
 				if ( isset( $header_skip[ $ci ] ) ) {
@@ -1018,7 +1033,7 @@ final class NTC_Renderer {
 			$out .= '</tr></thead>';
 		}
 		$out .= '<tbody>';
-		$out .= $progressive ? implode( '', array_column( array_slice( $records, 0, $page_size ), 'html' ) ) : $this->table_rows_html( $rows, $columns, $cell_meta, $config, $heat );
+		$out .= $progressive ? implode( '', array_column( array_slice( $records, 0, $page_size ), 'html' ) ) : $this->table_rows_html( $rows, $columns, $cell_meta, $config, $heat, 0, $headings );
 		$out .= '</tbody></table></div>';
 		if ( $progressive ) {
 			$out .= '<script type="application/json" class="ntc-table-data">' . wp_json_encode( $records ) . '</script>';
@@ -1029,7 +1044,7 @@ final class NTC_Renderer {
 		}
 		$out .= $this->updated_date_html( $config, $data );
 		$out .= '</div>' . $this->schema_json( $data, $config, $columns );
-		if ( $progressive || ! empty( $config['enableSorting'] ) && ! empty( $config['enableManualSorting'] ) || ! empty( $config['enableSearch'] ) || ! empty( $config['enablePagination'] ) || ! empty( $config['enableExport'] ) ) {
+		if ( $progressive || ! empty( $config['enableSorting'] ) && ! empty( $config['enableManualSorting'] ) || ! empty( $config['enableSearch'] ) || ! empty( $config['enablePagination'] ) || ! empty( $config['enableExport'] ) || ( $has_headings && ! empty( $config['sectionsCollapsible'] ) ) ) {
 			wp_enqueue_script( 'ntc-frontend' ); }
 		return $out;
 	}
@@ -1042,15 +1057,92 @@ final class NTC_Renderer {
 		return false;
 	}
 
-	private function table_rows_html( array $rows, array $columns, array $cell_meta, array $config, array $heat, int $position_offset = 0 ): string {
-		$out  = '';
-		$skip = array();
+	private static function sanitize_row_headings( $raw, int $row_count ): array {
+		$out = array();
+		foreach ( (array) $raw as $k => $on ) {
+			if ( ! $on || ! is_numeric( $k ) ) {
+				continue; }
+			$i = absint( $k );
+			if ( $i < $row_count ) {
+				$out[ $i ] = true; }
+		}
+		ksort( $out );
+		return $out;
+	}
+
+	private static function row_heading_style( array $config ): string {
+		$style = sanitize_key( (string) ( $config['rowHeadingStyle'] ?? 'banner' ) );
+		return in_array( $style, array( 'banner', 'side' ), true ) ? $style : 'banner';
+	}
+
+	private function section_toggle_html( int $section, bool $collapsible, bool $start_collapsed ): string {
+		if ( ! $collapsible ) {
+			return ''; }
+		$expanded = $start_collapsed ? 'false' : 'true';
+		return '<button type="button" class="ntc-section-toggle" data-section="' . $section . '" aria-expanded="' . $expanded . '"><span class="ntc-section-toggle-icon" aria-hidden="true"></span><span class="ntc-sr-only">' . esc_html__( 'Toggle section', 'native-tables-charts' ) . '</span></button>';
+	}
+
+	private function table_rows_html( array $rows, array $columns, array $cell_meta, array $config, array $heat, int $position_offset = 0, array $headings = array() ): string {
+		$out             = '';
+		$skip            = array();
+		$heading_style   = self::row_heading_style( $config );
+		$collapsible     = $headings && ! empty( $config['sectionsCollapsible'] );
+		$start_collapsed = $collapsible && ! empty( $config['sectionsStartCollapsed'] );
+		$position_col    = ! empty( $config['showPosition'] );
+		$total_cols      = count( $columns ) + ( $position_col ? 1 : 0 ) + ( $headings && 'side' === $heading_style ? 1 : 0 );
+		$side_counts     = array();
+		if ( $headings && 'side' === $heading_style ) {
+			$row_total = count( $rows );
+			foreach ( array_keys( $headings ) as $hi ) {
+				$n = 0;
+				for ( $i = $hi + 1; $i < $row_total; $i++ ) {
+					if ( isset( $headings[ $i ] ) ) {
+						break; }
+					$n++;
+				}
+				$side_counts[ $hi ] = $n;
+			}
+		}
+		$section      = -1;
+		$pos          = 0;
+		$pending_side = null;
 		foreach ( $rows as $local_ri => $row ) {
 			$ri      = $position_offset + $local_ri;
 			$meta_ri = isset( $row['_ntc_index'] ) ? (int) $row['_ntc_index'] : $ri;
-			$out    .= '<tr data-original-index="' . esc_attr( $meta_ri ) . '">';
-			if ( ! empty( $config['showPosition'] ) && 'left' === $config['positionSide'] ) {
-				$out .= '<th scope="row" class="ntc-position">' . esc_html( $ri + 1 ) . '</th>'; }
+			if ( isset( $headings[ $ri ] ) ) {
+				$section++;
+				$label = '';
+				foreach ( $row as $cell ) {
+					if ( '' !== trim( (string) $cell ) ) {
+						$label = (string) $cell;
+						break; }
+				}
+				$hmeta      = is_array( $cell_meta[ $meta_ri . ':0' ] ?? null ) ? $cell_meta[ $meta_ri . ':0' ] : array();
+				$label_html = $this->render_cell( $label, $hmeta, $config, false, 'text' );
+				if ( 'side' === $heading_style && ( $side_counts[ $ri ] ?? 0 ) > 0 ) {
+					$pending_side = array(
+						'html'    => $label_html,
+						'count'   => $side_counts[ $ri ],
+						'section' => $section,
+					);
+					continue;
+				}
+				// Banner style, or a side heading with no data rows beneath it.
+				$out .= '<tr class="ntc-row-heading" data-original-index="' . esc_attr( $meta_ri ) . '"><th class="ntc-row-heading-cell" colspan="' . $total_cols . '" scope="row">' . $this->section_toggle_html( $section, $collapsible, $start_collapsed ) . '<span class="ntc-row-heading-label">' . $label_html . '</span></th></tr>';
+				continue;
+			}
+			$pos++;
+			$row_attr = '';
+			if ( $headings && $section >= 0 ) {
+				$row_attr = ' class="ntc-section-row' . ( $start_collapsed ? ' is-section-hidden' : '' ) . '" data-section="' . $section . '"';
+			}
+			$out .= '<tr data-original-index="' . esc_attr( $meta_ri ) . '"' . $row_attr . '>';
+			if ( $position_col && 'left' === $config['positionSide'] ) {
+				$out .= '<th scope="row" class="ntc-position">' . esc_html( $pos ) . '</th>'; }
+			if ( $pending_side ) {
+				$out .= '<th class="ntc-row-heading-cell ntc-row-heading-side" rowspan="' . $pending_side['count'] . '" scope="rowgroup">' . $this->section_toggle_html( $pending_side['section'], $collapsible, $start_collapsed ) . '<span class="ntc-row-heading-label">' . $pending_side['html'] . '</span></th>';
+				$pending_side = null;
+			}
 			foreach ( $columns as $ci => $col ) {
 				if ( isset( $skip[ $local_ri ][ $ci ] ) ) {
 					continue; }
@@ -1086,8 +1178,8 @@ final class NTC_Renderer {
 					$attrs .= ' style="' . esc_attr( $style ) . '"'; }
 				$out .= '<td' . $attrs . '>' . $this->render_cell( $value, $meta, $config, false, $type ) . '</td>';
 			}
-			if ( ! empty( $config['showPosition'] ) && 'right' === $config['positionSide'] ) {
-				$out .= '<th scope="row" class="ntc-position">' . esc_html( $ri + 1 ) . '</th>'; }
+			if ( $position_col && 'right' === $config['positionSide'] ) {
+				$out .= '<th scope="row" class="ntc-position">' . esc_html( $pos ) . '</th>'; }
 			$out .= '</tr>';
 		}
 		return $out;
@@ -1449,6 +1541,8 @@ final class NTC_Renderer {
 			'--ntc-radius'         => absint( $c['borderRadius'] ) . 'px',
 			'--ntc-width'          => self::css_length( $c['width'] ) ? self::css_length( $c['width'] ) : '100%',
 			'--ntc-min-width'      => is_numeric( $c['minWidth'] ) ? absint( $c['minWidth'] ) . 'px' : self::css_length( $c['minWidth'] ),
+			'--ntc-heading-bg'     => $c['rowHeadingBackground'] ?? '',
+			'--ntc-heading-color'  => ! empty( $c['rowHeadingColor'] ) ? $c['rowHeadingColor'] : ( $c['accentColor'] ?? '' ),
 		);
 		$out  = '';
 		foreach ( $vars as $k => $v ) {

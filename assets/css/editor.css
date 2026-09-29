@@ -94,3 +94,9 @@
 .ntc-import-file{display:flex;flex-direction:column;align-items:flex-start;gap:7px}.ntc-import-file label{font-size:11px;font-weight:500;text-transform:uppercase;color:#1e1e1e}.ntc-import-file input{max-width:100%}
 .ntc-import-modal .ntc-paste-area textarea{min-height:220px;resize:vertical}.ntc-import-modal .components-toggle-control{padding-top:2px}
 @media (max-width:480px){.ntc-picker-search{grid-template-columns:1fr}.ntc-picker-search .components-button{width:100%;justify-content:center}.ntc-modal-actions{margin-inline:-16px;padding-inline:16px}}
+
+/* 3.2.0 sub-heading rows in the data grid */
+.ntc-grid-row.is-row-heading .ntc-grid-cell:not(.is-selected){background:#f0f3ff;font-weight:700}
+.ntc-grid-row.is-row-heading .ntc-grid-cell:first-of-type{box-shadow:inset 3px 0 0 #3858e9!important}
+.ntc-grid-row.is-row-heading .ntc-grid-rownum{background:#e7ebf7;color:#2c3f8c;font-weight:600}
+.ntc-row-heading-badge{display:inline-block;margin-right:2px;padding:0 3px;border-radius:2px;background:#3858e9;color:#fff;font-size:9px;font-weight:700;line-height:14px}

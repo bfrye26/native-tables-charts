@@ -76,8 +76,9 @@ function wp_create_nonce( $a = -1 ) {
 function register_block_type( $n, $a = array() ) {
 	$GLOBALS['block_types'][] = $n; }
 function register_block_pattern( $s, $p ) {
-	$GLOBALS['pattern_slug']  = $s;
-	$GLOBALS['pattern_props'] = $p; }
+	$GLOBALS['pattern_slug']      = $s;
+	$GLOBALS['pattern_props']     = $p;
+	$GLOBALS['patterns'][ $s ]    = $p; }
 function wp_kses_post( $v ) {
 	return (string) $v; }
 function wp_kses( $v, $a = array(), $p = array() ) {

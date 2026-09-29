@@ -1293,6 +1293,103 @@ $ntc->invalidate_usage_cache();
 $assert( 'ntc_post_source_version' === $GLOBALS['last_option'][0] && 1 === $GLOBALS['last_option'][1], 'invalidate_usage_cache bumps version option' );
 $reg = new ReflectionMethod( 'NTC_Plugin', 'register_assets_and_blocks' );
 $reg->invoke( $ntc );
-$assert( isset( $GLOBALS['pattern_slug'] ) && 'ntc/review-card' === $GLOBALS['pattern_slug'], 'review-card pattern registered via register_assets_and_blocks' );
+$assert( isset( $GLOBALS['patterns']['ntc/review-card'] ), 'review-card pattern registered via register_assets_and_blocks' );
+$assert( isset( $GLOBALS['patterns']['ntc/spec-sheet'] ), 'spec-sheet pattern registered via register_assets_and_blocks' );
+$spec_pattern = (string) ( $GLOBALS['patterns']['ntc/spec-sheet']['content'] ?? '' );
+$spec_attrs   = array();
+if ( preg_match( '/<!-- wp:ntc\/table (\{.*?\}) \/-->/s', $spec_pattern, $spec_match ) ) {
+	$spec_attrs = json_decode( $spec_match[1], true ) ?: array(); }
+$assert( ! empty( $spec_attrs ) && is_array( $spec_attrs['rows'] ?? null ), 'spec-sheet pattern block attributes decode as JSON' );
+$spec_headings = (array) ( $spec_attrs['config']['rowHeadings'] ?? array() );
+$assert( 'side' === ( $spec_attrs['config']['rowHeadingStyle'] ?? '' ) && ! empty( $spec_attrs['config']['sectionsCollapsible'] ), 'spec-sheet pattern uses collapsible side-label sections' );
+$spec_headings_valid = ! empty( $spec_headings );
+foreach ( array_keys( $spec_headings ) as $hi ) {
+	$heading_row = $spec_attrs['rows'][ (int) $hi ] ?? null;
+	if ( ! is_array( $heading_row ) || '' !== trim( (string) ( $heading_row[1] ?? '' ) ) || '' === trim( (string) ( $heading_row[0] ?? '' ) ) ) {
+		$spec_headings_valid = false; }
+}
+$assert( $spec_headings_valid, 'spec-sheet pattern heading indexes point at section label rows' );
+$spec_html = $call( 'render_table', $spec_attrs );
+$assert( 7 === substr_count( $spec_html, 'ntc-row-heading-side' ) && 7 === substr_count( $spec_html, 'ntc-section-toggle"' ), 'spec-sheet pattern renders all seven sections with toggles' );
+$spec_rows  = array(
+	array( 'NETWORK', '' ),
+	array( 'Technology', 'GSM / HSPA / LTE / 5G' ),
+	array( 'BODY', '' ),
+	array( 'Dimensions', '151.8 x 72 x 8.5 mm' ),
+	array( 'Weight', '203 g' ),
+);
+$spec_cols  = array(
+	array( 'id' => 'c1', 'label' => 'Spec', 'type' => 'text', 'unit' => '' ),
+	array( 'id' => 'c2', 'label' => 'Detail', 'type' => 'text', 'unit' => '' ),
+);
+$banner_table = $call(
+	'render_table',
+	array(
+		'columns' => $spec_cols,
+		'rows'    => $spec_rows,
+		'config'  => array( 'rowHeadings' => array( 0 => true, 2 => true ) ),
+	)
+);
+$assert( 2 === substr_count( $banner_table, 'ntc-row-heading-cell' ), 'banner headings render one full-width th per heading row' );
+$assert( false !== strpos( $banner_table, 'colspan="2"' ), 'banner heading spans all columns' );
+$assert( 1 === substr_count( $banner_table, 'data-section="0"' ) && 2 === substr_count( $banner_table, 'data-section="1"' ), 'data rows carry their section index' );
+$assert( false === strpos( $banner_table, 'ntc-row-heading-side' ), 'banner style renders no side label cells' );
+$side_table = $call(
+	'render_table',
+	array(
+		'columns' => $spec_cols,
+		'rows'    => $spec_rows,
+		'config'  => array(
+			'rowHeadings'     => array( 0 => true, 2 => true ),
+			'rowHeadingStyle' => 'side',
+		),
+	)
+);
+$assert( false !== strpos( $side_table, 'ntc-row-heading-side' ), 'side style renders rowspan label cells' );
+$assert( false !== strpos( $side_table, 'rowspan="1"' ) && false !== strpos( $side_table, 'rowspan="2"' ), 'side label rowspan covers the section data rows' );
+$assert( false !== strpos( $side_table, 'ntc-row-heading-head' ), 'side style adds a spare header column to keep alignment' );
+$assert( false === strpos( $side_table, '<tr class="ntc-row-heading"' ), 'side style consumes heading rows instead of emitting banners' );
+$collapse_table = $call(
+	'render_table',
+	array(
+		'columns' => $spec_cols,
+		'rows'    => $spec_rows,
+		'config'  => array(
+			'rowHeadings'            => array( 0 => true, 2 => true ),
+			'sectionsCollapsible'    => true,
+			'sectionsStartCollapsed' => true,
+		),
+	)
+);
+$assert( 4 === substr_count( $collapse_table, 'ntc-section-toggle' ), 'collapsible sections render a toggle per heading' );
+$assert( false !== strpos( $collapse_table, 'aria-expanded="false"' ), 'start-collapsed toggles begin aria-expanded false' );
+$assert( 3 === substr_count( $collapse_table, 'is-section-hidden' ), 'start-collapsed hides every section data row' );
+$paged_headings = $call(
+	'render_table',
+	array(
+		'columns' => $spec_cols,
+		'rows'    => $spec_rows,
+		'config'  => array(
+			'rowHeadings'      => array( 0 => true ),
+			'enablePagination' => true,
+			'enableSorting'    => true,
+		),
+	)
+);
+$assert( false === strpos( $paged_headings, 'ntc-table-pager' ), 'section tables skip pagination to keep groups together' );
+$assert( false === strpos( $paged_headings, 'ntc-sort' ), 'section tables skip sorting controls to keep groups together' );
+$position_table = $call(
+	'render_table',
+	array(
+		'columns' => $spec_cols,
+		'rows'    => $spec_rows,
+		'config'  => array(
+			'rowHeadings'  => array( 0 => true, 2 => true ),
+			'showPosition' => true,
+		),
+	)
+);
+$assert( 3 === substr_count( $position_table, 'class="ntc-position"' ), 'position numbering skips heading rows' );
+$assert( false !== strpos( $position_table, 'colspan="3"' ), 'banner heading colspan includes the position column' );
 echo $fails ? "FAILURES: $fails\n" : "ALL PASS\n";
 exit( $fails ? 1 : 0 );

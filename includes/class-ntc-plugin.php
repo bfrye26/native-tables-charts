@@ -124,6 +124,15 @@ final class NTC_Plugin {
 				'content'     => '<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column {"width":"33%"} --><div class="wp-block-column" style="flex-basis:33%"><!-- wp:ntc/chart {"config":{"chartType":"gauge","title":"Score","labelColumn":0,"valueColumns":[1],"preset":"benchmark-dark","schemaType":"off"}} /--></div><!-- /wp:column --><!-- wp:column {"width":"67%"} --><div class="wp-block-column" style="flex-basis:67%"><!-- wp:ntc/chart {"config":{"chartType":"radar","title":"Category Scores","labelColumn":0,"valueColumns":[1],"preset":"benchmark-dark"}} /--></div><!-- /wp:column --></div><!-- /wp:columns --><!-- wp:ntc/table {"config":{"preset":"editorial","responsiveMode":"scroll"}} /-->',
 			)
 		);
+		register_block_pattern(
+			'ntc/spec-sheet',
+			array(
+				'title'       => __( 'Spec Sheet (Native Tables & Charts)', 'native-tables-charts' ),
+				'description' => __( 'Collapsible specification table with side-label section headings (network, body, display, platform, memory, battery).', 'native-tables-charts' ),
+				'categories'  => array( 'ntc-data' ),
+				'content'     => '<!-- wp:ntc/table {"columns":[{"id":"c1","label":"Spec","type":"text","unit":""},{"id":"c2","label":"Detail","type":"text","unit":""}],"rows":[["NETWORK",""],["Technology","GSM / HSPA / LTE / 5G"],["LAUNCH",""],["Announced","2026, September 23"],["Status","Available. Released 2026, September 23"],["BODY",""],["Dimensions","151.8 x 72 x 8.5 mm (5.98 x 2.83 x 0.33 in)"],["Weight","203 g (7.16 oz)"],["Build","Glass front, aluminum frame"],["SIM","Nano-SIM + Nano-SIM, IP68 dust and water resistant"],["DISPLAY",""],["Type","LTPO AMOLED, 68B colors, 120Hz, Dolby Vision, HDR10+"],["Size","6.4 inches, 100.3 cm² (~91.8% screen-to-body ratio)"],["Resolution","1120 x 2436 pixels, 19.5:9 ratio (~419 ppi density)"],["Protection","Dragon Crystal Glass 3"],["PLATFORM",""],["OS","Android 17, HyperOS 4"],["Chipset","Snapdragon 8 Elite Gen 6 (2 nm)"],["CPU","Octa-core (up to 5 GHz)"],["GPU","Adreno"],["MEMORY",""],["Card slot","No"],["Internal","256GB 12GB RAM, 512GB 12GB RAM, 1TB 16GB RAM, UFS 4.1"],["BATTERY",""],["Type","6000 mAh, Si/C Li-Ion"],["Charging","100W wired, 50W wireless, 10W reverse wireless"]],"config":{"preset":"editorial","showHeader":false,"responsiveMode":"scroll","rowHeadingStyle":"side","sectionsCollapsible":true,"rowHeadings":{"0":true,"2":true,"5":true,"10":true,"15":true,"20":true,"23":true}}} /-->',
+			)
+		);
 	}
 	public function invalidate_usage_cache( int $post_id = 0, ?WP_Post $post = null ): void {
 		if ( $post_id < 1 ) {
